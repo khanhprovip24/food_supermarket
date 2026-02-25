@@ -29,6 +29,8 @@ local_settings.py
 db.sqlite3
 /media
 /staticfiles
+.env
+.env.local
 
 # Node/Frontend
 node_modules/

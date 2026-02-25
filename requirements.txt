@@ -11,6 +11,7 @@ Pillow==10.0.0
 
 # Configuration Management
 python-decouple==3.8
+python-dotenv==1.0.0
 
 # Authentication
 PyJWT==2.8.0
