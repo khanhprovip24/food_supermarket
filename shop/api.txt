@@ -1,0 +1,41 @@
+ API nên build theo thứ tự này:
+1️⃣ Authentication API (Cơ bản)
+POST   /api/auth/register
+POST   /api/auth/login
+POST   /api/auth/logout
+GET    /api/auth/me
+2️⃣ Product API (Phía khách)
+GET    /api/products/           (danh sách, filter by category, search)
+GET    /api/products/<id>/      (chi tiết)
+GET    /api/categories/         (danh mục)
+GET    /api/products/<id>/reviews/  (đánh giá)
+3️⃣ Cart API
+POST   /api/cart/add/
+GET    /api/cart/
+DELETE /api/cart/remove/
+POST   /api/cart/clear/
+4️⃣ Order API
+POST   /api/orders/             (tạo đơn hàng)
+GET    /api/orders/             (lịch sử đơn hàng)
+GET    /api/orders/<id>/        (chi tiết đơn)
+PUT    /api/orders/<id>/        (cập nhật status)
+5️⃣ Admin API (Quản lý)
+GET    /api/admin/products/
+POST   /api/admin/products/
+PUT    /api/admin/products/<id>/
+DELETE /api/admin/products/<id>/
+
+GET    /api/admin/orders/
+PUT    /api/admin/orders/<id>/status/
+
+GET    /api/admin/stats/
+6️⃣ Wishlist API
+GET    /api/wishlist/
+POST   /api/wishlist/add/
+DELETE /api/wishlist/remove/
+7️⃣ Review API
+GET    /api/products/<id>/reviews/
+POST   /api/products/<id>/reviews/
+PUT    /api/reviews/<id>/
+DELETE /api/reviews/<id>/
+✨ Khuyến nghị:
