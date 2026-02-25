@@ -1,0 +1,100 @@
+=====================================
+FRESH FOOD SHOP - SETUP GUIDE
+=====================================
+
+YÊU CẦU: Python 3.8+, Node.js 14+, Git
+
+=====================================
+BƯỚC 1: Clone & Setup Environment
+=====================================
+
+git clone https://github.com/khanhprovip24/food_supermarket.git
+cd project_web
+
+# Tạo file .env (BẮTBUỘC!)
+copy .env.example .env
+
+=====================================
+BƯỚC 2: Setup Backend (Django)
+=====================================
+
+# Tạo & kích hoạt virtual environment
+python -m venv venv
+venv\Scripts\activate
+
+# Cài dependencies & migrate database
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py populate_data  # Optional
+
+# Chạy server
+python manage.py runserver
+→ http://localhost:8000
+
+=====================================
+BƯỚC 3: Setup Frontend (React)
+=====================================
+
+cd fresh-food-shop
+npm install
+npm run dev
+→ http://localhost:5173
+
+=====================================
+CHẠY TOÀN BỘ
+=====================================
+
+Mở 2 terminal:
+
+Terminal 1 (Backend):
+  venv\Scripts\activate
+  python manage.py runserver
+
+Terminal 2 (Frontend):
+  cd fresh-food-shop
+  npm run dev
+
+=====================================
+LƯU Ý QUAN TRỌNG
+=====================================
+
+⚠️ .env file:
+   - PHẢI copy từ .env.example
+   - KHÔNG commit lên GitHub
+   - Mỗi người có file khác nhau
+
+⚠️ Không commit:
+   - db.sqlite3, __pycache__, node_modules, venv, .env
+
+⚠️ Thêm package mới:
+   - Python: pip install <pkg> → pip freeze > requirements.txt
+   - Node: npm install <pkg> → commit package.json
+
+⚠️ Kích hoạt virtual environment mỗi lần làm việc!
+
+=====================================
+TROUBLESHOOTING
+=====================================
+
+❌ "No module named 'decouple'"
+→ copy .env.example .env
+→ pip install -r requirements.txt
+
+❌ "Port 8000/5173 đang dùng"
+→ python manage.py runserver 8001
+→ npm run dev (sẽ tự tìm port khác)
+
+❌ Database error
+→ python manage.py migrate
+→ python manage.py populate_data
+
+=====================================
+NEXT STEPS
+=====================================
+
+1. Đọc CONTRIBUTING.md (quy tắc commit)
+2. Tạo branch: git checkout -b feature/name
+3. Code & commit
+4. Push & tạo Pull Request
+
+Happy coding! 🚀
