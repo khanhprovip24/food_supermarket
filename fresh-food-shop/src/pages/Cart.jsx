@@ -49,8 +49,9 @@ const Cart = () => {
       ) : (
         <>
           <div className="mb-4 flex items-center gap-2">
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600">
+            <label htmlFor="select-all" className="flex items-center gap-2 cursor-pointer text-sm text-gray-600">
               <input
+                id="select-all"
                 type="checkbox"
                 checked={selectedIds.size === cartItems.length && cartItems.length > 0}
                 onChange={selectAll}
@@ -67,8 +68,9 @@ const Cart = () => {
                 className="border p-4 rounded flex justify-between items-center gap-4"
               >
                 <div className="flex gap-4 flex-1 min-w-0 items-center">
-                  <label className="flex items-center cursor-pointer flex-shrink-0">
+                  <label htmlFor={`item-${item.id}`} className="flex items-center cursor-pointer flex-shrink-0">
                     <input
+                      id={`item-${item.id}`}
                       type="checkbox"
                       checked={selectedIds.has(item.id)}
                       onChange={() => toggleSelect(item.id)}

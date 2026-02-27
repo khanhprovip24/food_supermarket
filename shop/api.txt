@@ -39,3 +39,25 @@ POST   /api/products/<id>/reviews/
 PUT    /api/reviews/<id>/
 DELETE /api/reviews/<id>/
 ✨ Khuyến nghị:
+🎯 Tóm tắt (5 giai đoạn):
+#	Giai đoạn	Ưu tiên	Service	Pages	Thời gian
+0️⃣	Auth ✅	⭐⭐⭐⭐⭐	authService	Login, Register	✅ Xong
+1️⃣	Products & Categories	⭐⭐⭐⭐⭐	productService	Home, Products, ProductDetail	Tuần 1
+2️⃣	Cart & Orders	⭐⭐⭐⭐⭐	cartService, orderService	Cart, Checkout, MyOrders	Tuần 2
+3️⃣	Profile	⭐⭐⭐⭐	authService	Profile	Tuần 3
+4️⃣	Wishlist	⭐⭐⭐	wishlistService	ProductCard, ProductDetail	Tuần 4
+5️⃣	Admin	⭐⭐⭐	adminService	Admin Dashboard	Tuần 5+
+📊 Lý do thứ tự này:
+Products trước - Core content, user thấy sản phẩm trước tiên
+Cart & Orders sau - Phụ thuộc vào Products, workflow chính
+Profile - Quản lý account (độc lập, có thể làm sau)
+Wishlist - Tính năng phụ, không blocking workflow
+Admin - Quản lý backend, ưu tiên thấp nhất
+🚀 Chi tiết Giai đoạn 1 (Products)
+Pages cần update:
+
+Home.jsx → Hiển thị featured products
+Products.jsx → Danh sách + filter
+ProductDetail.jsx → Chi tiết + review
+Tôi sẽ bắt đầu với Giai đoạn 1 (Products) có được không? 🚀
+

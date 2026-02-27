@@ -168,6 +168,10 @@ CSRF_TRUSTED_ORIGINS = [
 # Exempt /api/ paths from CSRF check
 CSRF_EXEMPT_PATHS = ['/api/']
 
+# Media files (User uploads: products, categories, avatars)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 # drf-spectacular configuration for Swagger/ReDoc
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Fresh Food Shop API',

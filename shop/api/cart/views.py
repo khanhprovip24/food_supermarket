@@ -3,11 +3,13 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
+from django.views.decorators.csrf import csrf_exempt
 
 from shop.models import Cart, CartItem, Product
 from shop.api.cart.serializers import CartSerializer, CartItemSerializer
 
 @api_view(['POST'])
+@csrf_exempt
 @permission_classes([IsAuthenticated])
 def add_to_cart(request):
     """
@@ -19,9 +21,17 @@ def add_to_cart(request):
         "quantity": 2
     }
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
+        logger.info(f"Request data: {request.data}")
+        logger.info(f"User: {request.user}")
+        
         product_id = request.data.get('product_id')
         quantity = request.data.get('quantity', 1)
+        
+        logger.info(f"Product ID: {product_id}, Quantity: {quantity}")
         
         if not product_id:
             return Response({
@@ -60,13 +70,19 @@ def add_to_cart(request):
         
         cart_item.save()
         
+        serializer = CartSerializer(cart, context={'request': request})
+        logger.info(f"Cart updated: {serializer.data}")
+        
         return Response({
             'success': True,
             'message': 'Product added to cart',
-            'cart': CartSerializer(cart).data
+            'cart': serializer.data
         }, status=status.HTTP_200_OK)
     
     except Exception as e:
+        import traceback
+        logger.error(f"Error in add_to_cart: {str(e)}")
+        logger.error(traceback.format_exc())
         return Response({
             'success': False,
             'message': str(e)
@@ -74,6 +90,7 @@ def add_to_cart(request):
 
 
 @api_view(['GET'])
+@csrf_exempt
 @permission_classes([IsAuthenticated])
 def get_cart(request):
     """
@@ -81,13 +98,23 @@ def get_cart(request):
     
     GET /api/cart/
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
+        logger.info(f"Getting cart for user: {request.user}")
+        logger.info(f"User is authenticated: {request.user.is_authenticated}")
         cart, created = Cart.objects.get_or_create(user=request.user)
+        serializer = CartSerializer(cart, context={'request': request})
+        logger.info(f"Cart data: {serializer.data}")
         return Response({
             'success': True,
-            'cart': CartSerializer(cart).data
+            'cart': serializer.data
         }, status=status.HTTP_200_OK)
     except Exception as e:
+        import traceback
+        logger.error(f"Error in get_cart: {str(e)}")
+        logger.error(traceback.format_exc())
         return Response({
             'success': False,
             'message': str(e)
@@ -95,6 +122,7 @@ def get_cart(request):
 
 
 @api_view(['DELETE'])
+@csrf_exempt
 @permission_classes([IsAuthenticated])
 def remove_from_cart(request):
     """
@@ -105,8 +133,13 @@ def remove_from_cart(request):
         "product_id": 1
     }
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
+        logger.info(f"Removing from cart for user: {request.user}")
         product_id = request.data.get('product_id')
+        logger.info(f"Product ID to remove: {product_id}")
         
         if not product_id:
             return Response({
@@ -122,10 +155,13 @@ def remove_from_cart(request):
         return Response({
             'success': True,
             'message': 'Product removed from cart',
-            'cart': CartSerializer(cart).data
+            'cart': CartSerializer(cart, context={'request': request}).data
         }, status=status.HTTP_200_OK)
     
     except Exception as e:
+        import traceback
+        logger.error(f"Error in remove_from_cart: {str(e)}")
+        logger.error(traceback.format_exc())
         return Response({
             'success': False,
             'message': str(e)
@@ -133,6 +169,7 @@ def remove_from_cart(request):
 
 
 @api_view(['POST'])
+@csrf_exempt
 @permission_classes([IsAuthenticated])
 def clear_cart(request):
     """
@@ -140,17 +177,25 @@ def clear_cart(request):
     
     POST /api/cart/clear/
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
+        logger.info(f"Clearing cart for user: {request.user}")
         cart = get_object_or_404(Cart, user=request.user)
         cart.items.all().delete()
+        logger.info(f"Cart cleared successfully")
         
         return Response({
             'success': True,
             'message': 'Cart cleared successfully',
-            'cart': CartSerializer(cart).data
+            'cart': CartSerializer(cart, context={'request': request}).data
         }, status=status.HTTP_200_OK)
     
     except Exception as e:
+        import traceback
+        logger.error(f"Error in clear_cart: {str(e)}")
+        logger.error(traceback.format_exc())
         return Response({
             'success': False,
             'message': str(e)

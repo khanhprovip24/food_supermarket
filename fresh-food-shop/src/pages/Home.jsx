@@ -226,25 +226,216 @@
 // };
 
 // export default HomePage;
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { ArrowRight, Sparkles, Shield, Truck, AlertCircle } from "lucide-react";
 import MainLayout from "../layouts/MainLayout";
-import HeroBanner from "../components/home/HeroBanner";
-import FeaturedProducts from "../components/home/FeaturedProducts";
+import ProductCard from "../components/products/ProductCard";
+import productService from "../services/productService";
 
 const Home = () => {
+  const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        
+        // Lấy danh mục
+        const categoriesRes = await productService.getCategories();
+        if (categoriesRes.success) {
+          setCategories(categoriesRes.data);
+        }
+
+        // Lấy sản phẩm
+        const productsRes = await productService.getProducts({ status: true });
+        if (productsRes.success) {
+          setProducts(productsRes.data.slice(0, 6)); // Lấy 6 sản phẩm đầu
+        } else {
+          setError(productsRes.error);
+        }
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
   return (
     <MainLayout>
-      <HeroBanner />
-      <FeaturedProducts />
+      {/* Hero Section */}
+      <section className="relative bg-gradient-to-br from-green-50 via-white to-green-100 overflow-hidden">
+        <div className="absolute inset-0 opacity-10" />
+        
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 relative z-10">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            {/* Left Content */}
+            <div className="space-y-8">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-md">
+                <Sparkles size={18} className="text-yellow-500" />
+                <span className="text-sm font-semibold text-green-600">
+                  Giảm 25% cho đơn hàng đầu tiên
+                </span>
+              </div>
 
-      <section className="section bg-white">
-        <div className="container-custom text-center">
-          <h2 className="text-4xl font-bold mb-6">
+              <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 leading-tight">
+                Thực phẩm{' '}
+                <span className="text-green-600">tươi sạch</span>
+                <br />
+                giao tận nhà
+              </h1>
+
+              <p className="text-xl text-gray-600 leading-relaxed">
+                Rau củ, thịt cá, trái cây tươi ngon mỗi ngày. Nguồn gốc rõ ràng, 
+                chất lượng đảm bảo cho sức khỏe gia đình bạn.
+              </p>
+
+              <div className="flex flex-wrap gap-4">
+                <Link
+                  to="/products"
+                  className="inline-flex items-center gap-2 px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                >
+                  <span>Mua sắm ngay</span>
+                  <ArrowRight size={20} />
+                </Link>
+              </div>
+
+              {/* Trust Badges */}
+              <div className="flex flex-wrap gap-6 pt-4">
+                <div className="flex items-center gap-2">
+                  <Shield size={20} className="text-green-600" />
+                  <div>
+                    <p className="font-semibold text-sm text-gray-900">100% Organic</p>
+                    <p className="text-xs text-gray-600">Chứng nhận VietGAP</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Truck size={20} className="text-green-600" />
+                  <div>
+                    <p className="font-semibold text-sm text-gray-900">Giao hàng nhanh</p>
+                    <p className="text-xs text-gray-600">Trong vòng 2 giờ</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Image */}
+            <div className="relative">
+              <img
+                src="https://images.unsplash.com/photo-1542838132-92c53300491e?w=800"
+                alt="Fresh vegetables"
+                className="rounded-2xl shadow-lg w-full"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Categories Section */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              Danh mục sản phẩm
+            </h2>
+            <p className="text-gray-600 text-lg">
+              Khám phá đa dạng thực phẩm tươi sạch cho bữa ăn gia đình
+            </p>
+          </div>
+
+          {categories.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {categories.map((category) => (
+                <Link
+                  key={category.id}
+                  to={`/products?category=${category.id}`}
+                  className="p-6 text-center bg-white border border-gray-200 rounded-lg hover:shadow-lg hover:scale-105 transition-all"
+                >
+                  {category.image && (
+                    <img
+                      src={productService.getImageUrl(category.image)}
+                      alt={category.name}
+                      className="w-20 h-20 mx-auto mb-4 object-cover rounded-full"
+                    />
+                  )}
+                  <h3 className="font-semibold text-lg text-gray-900">
+                    {category.name}
+                  </h3>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-gray-600">Không có danh mục nào</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Featured Products */}
+      <section className="py-16 bg-gradient-to-b from-white to-green-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between mb-12">
+            <div>
+              <h2 className="text-4xl font-bold text-gray-900 mb-2">
+                Sản phẩm nổi bật
+              </h2>
+              <p className="text-gray-600 text-lg">
+                Những sản phẩm được yêu thích nhất
+              </p>
+            </div>
+            <Link
+              to="/products"
+              className="inline-flex items-center gap-2 px-4 py-2 text-green-600 hover:text-green-700"
+            >
+              <span>Xem tất cả</span>
+              <ArrowRight size={18} />
+            </Link>
+          </div>
+
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+              <AlertCircle size={20} className="text-red-600" />
+              <span className="text-red-700">{error}</span>
+            </div>
+          )}
+
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-64 bg-gray-200 rounded-lg animate-pulse" />
+              ))}
+            </div>
+          ) : products.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {products.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-gray-600">Không có sản phẩm nào</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-4xl font-bold text-gray-900 mb-12">
             Vì sao chọn chúng tôi?
           </h2>
 
-          <div className="grid md:grid-cols-3 gap-8 mt-10">
-            <div className="fresh-card p-8">
-              <h3 className="text-xl font-semibold mb-3">
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="p-8 bg-green-50 rounded-lg">
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">
                 100% Hữu cơ
               </h3>
               <p className="text-gray-600">
@@ -252,8 +443,8 @@ const Home = () => {
               </p>
             </div>
 
-            <div className="fresh-card p-8">
-              <h3 className="text-xl font-semibold mb-3">
+            <div className="p-8 bg-green-50 rounded-lg">
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">
                 Giao nhanh 2h
               </h3>
               <p className="text-gray-600">
@@ -261,8 +452,8 @@ const Home = () => {
               </p>
             </div>
 
-            <div className="fresh-card p-8">
-              <h3 className="text-xl font-semibold mb-3">
+            <div className="p-8 bg-green-50 rounded-lg">
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">
                 Hoàn tiền 100%
               </h3>
               <p className="text-gray-600">

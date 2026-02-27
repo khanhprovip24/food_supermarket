@@ -1,137 +1,122 @@
-import { useCart } from "../context/CartContext";
-import { useAdmin } from "../context/AdminContext";
-import { useAuth } from "../context/AuthContext";
-import MainLayout from "../layouts/MainLayout";
-import { useNavigate, useLocation } from "react-router-dom";
-import { useState, useEffect } from "react";
-
-const SHIPPING_STORAGE_KEY = "freshFoodShippingInfoHistory";
-
-const getSavedShippingList = () => {
-  try {
-    const raw = localStorage.getItem(SHIPPING_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-};
-
-const saveShippingToHistory = (info) => {
-  const list = getSavedShippingList();
-  const newItem = {
-    ...info,
-    savedAt: new Date().toISOString(),
-    id: Date.now(),
-  };
-  const updated = [newItem, ...list].slice(0, 10);
-  localStorage.setItem(SHIPPING_STORAGE_KEY, JSON.stringify(updated));
-  return updated;
-};
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
+import orderService from '../services/orderService';
+import MainLayout from '../layouts/MainLayout';
 
 const Checkout = () => {
-  const { cartItems, clearCart, removeItems } = useCart();
-  const admin = useAdmin();
-  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const selectedIds = location.state?.selectedIds;
+  const { cartItems, clearCart, removeItems } = useCart();
+  const { user, isAuthenticated } = useAuth();
 
-  const orderItems =
-    selectedIds?.length > 0
-      ? cartItems.filter((item) => selectedIds.includes(item.id))
-      : cartItems;
+  // Get selected item IDs from navigation state
+  const selectedIds = location.state?.selectedIds || [];
+
+  const [formData, setFormData] = useState({
+    shippingAddress: '',
+    paymentMethod: 'cash',
+    discountCode: '',
+  });
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(false);
+  const [orderId, setOrderId] = useState(null);
+
+  // Filter cart items to only include selected ones
+  const orderItems = selectedIds.length > 0
+    ? cartItems.filter((item) => selectedIds.includes(item.id))
+    : cartItems;
+
   const totalPrice = orderItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
+    (sum, item) => sum + (item.price || 0) * (item.quantity || 0),
     0
   );
 
-  const [form, setForm] = useState({
-    name: "",
-    phone: "",
-    address: "",
-  });
-  const [paymentMethod, setPaymentMethod] = useState("cash");
-  const [savedList, setSavedList] = useState([]);
-
+  // Redirect to login if not authenticated
   useEffect(() => {
-    setSavedList(getSavedShippingList());
-  }, []);
-
-  const handleChange = (e) => {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const handleSaveInfo = () => {
-    if (!form.name.trim() || !form.phone.trim() || !form.address.trim()) {
-      alert("Vui lòng điền đầy đủ tên, SĐT và địa chỉ trước khi lưu.");
-      return;
+    if (!isAuthenticated) {
+      navigate('/login');
     }
-    const updated = saveShippingToHistory(form);
-    setSavedList(updated);
-    alert("Đã lưu thông tin. Lần sau bạn có thể chọn từ danh sách.");
+  }, [isAuthenticated, navigate]);
+
+  // Redirect to cart if no items
+  useEffect(() => {
+    if (!loading && !success && orderItems.length === 0) {
+      navigate('/cart');
+    }
+  }, [loading, success, orderItems.length, navigate]);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
-  const applySavedInfo = (item) => {
-    setForm({
-      name: item.name || "",
-      phone: item.phone || "",
-      address: item.address || "",
-    });
-  };
-
-  const handleSubmit = (e) => {
+  const handleSubmitOrder = async (e) => {
     e.preventDefault();
-    if (orderItems.length === 0) {
-      alert("Không có sản phẩm nào để đặt. Vui lòng chọn sản phẩm từ giỏ hàng.");
+    setLoading(true);
+    setError(null);
+
+    // Validate form
+    if (!formData.shippingAddress.trim()) {
+      setError('Vui lòng nhập địa chỉ giao hàng');
+      setLoading(false);
       return;
     }
-    const methodLabel = paymentMethod === "cash" ? "Tiền mặt" : "Chuyển khoản / QR";
-    if (admin) {
-      admin.addOrder({
-        customerName: form.name,
-        customerPhone: form.phone,
-        address: form.address,
-        customerEmail: user?.email || null,
-        items: orderItems.map((i) => ({
-          productId: i.id,
-          name: i.name,
-          image: i.image,
-          category: i.category,
-          quantity: i.quantity,
-          unit: i.unit || "sản phẩm",
-          price: i.price,
-        })),
-        total: totalPrice,
-        paymentMethod: methodLabel,
-      });
+
+    try {
+      const result = await orderService.createOrder(
+        formData.shippingAddress,
+        formData.paymentMethod,
+        formData.discountCode || null
+      );
+
+      if (result.success) {
+        setSuccess(true);
+        setOrderId(result.data.id);
+        
+        // Remove ordered items from cart
+        if (selectedIds.length > 0) {
+          await removeItems(selectedIds);
+        } else {
+          await clearCart();
+        }
+
+        // Redirect to order detail after 2 seconds
+        setTimeout(() => {
+          navigate(`/orders/${result.data.id}`);
+        }, 2000);
+      } else {
+        setError(result.error || 'Không thể tạo đơn hàng. Vui lòng thử lại.');
+      }
+    } catch (err) {
+      console.error('Error creating order:', err);
+      setError('Có lỗi xảy ra khi xử lý đơn hàng');
+    } finally {
+      setLoading(false);
     }
-    alert(`Đặt hàng thành công 🎉\nPhương thức thanh toán: ${methodLabel}`);
-    if (selectedIds?.length > 0) {
-      removeItems(selectedIds);
-    } else {
-      clearCart();
-    }
-    navigate("/");
   };
 
-  if (orderItems.length === 0) {
+  if (success) {
     return (
       <MainLayout>
-        <h2 className="text-3xl font-bold mb-8">Thanh toán</h2>
-        <p className="text-gray-600 mb-4">
-          {cartItems.length === 0
-            ? "Bạn chưa có sản phẩm nào trong giỏ."
-            : "Vui lòng chọn sản phẩm từ giỏ hàng rồi nhấn Đặt hàng."}
-        </p>
-        <button
-          onClick={() => navigate("/cart")}
-          className="bg-green-600 text-white px-6 py-3 rounded"
-        >
-          Về giỏ hàng
-        </button>
+        <div className="max-w-md mx-auto bg-white rounded-lg shadow-lg p-8 my-12">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Đặt hàng thành công!</h2>
+            <p className="text-gray-600 mb-4">Mã đơn hàng: <span className="font-bold">{orderId}</span></p>
+            <p className="text-gray-500 text-sm mb-6">Đang chuyển hướng đến chi tiết đơn hàng...</p>
+          </div>
+        </div>
       </MainLayout>
     );
   }
@@ -140,173 +125,142 @@ const Checkout = () => {
     <MainLayout>
       <h2 className="text-3xl font-bold mb-8">Thanh toán</h2>
 
-      <div className="grid md:grid-cols-2 gap-10">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {savedList.length > 0 && (
-            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Sử dụng thông tin đã lưu
-              </label>
-              <select
-                className="w-full border p-2 rounded"
-                onChange={(e) => {
-                  const id = Number(e.target.value);
-                  if (!id) return;
-                  const item = savedList.find((s) => s.id === id);
-                  if (item) applySavedInfo(item);
-                }}
-              >
-                <option value="">-- Chọn thông tin đã lưu --</option>
-                {savedList.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} - {item.phone}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <input
-            type="text"
-            name="name"
-            placeholder="Họ và tên"
-            value={form.name}
-            onChange={handleChange}
-            required
-            className="w-full border p-3 rounded"
-          />
-
-          <input
-            type="text"
-            name="phone"
-            placeholder="Số điện thoại"
-            value={form.phone}
-            onChange={handleChange}
-            required
-            className="w-full border p-3 rounded"
-          />
-
-          <input
-            type="text"
-            name="address"
-            placeholder="Địa chỉ"
-            value={form.address}
-            onChange={handleChange}
-            required
-            className="w-full border p-3 rounded"
-          />
-
-          <div className="flex gap-4">
-            <button
-              type="button"
-              onClick={handleSaveInfo}
-              className="bg-gray-500 text-white px-6 py-3 rounded hover:bg-gray-600"
-            >
-              Lưu thông tin đặt hàng
-            </button>
-          </div>
-
-          <div className="pt-4 border-t">
-            <p className="font-medium text-gray-700 mb-2">Phương thức thanh toán</p>
-            <label className="flex items-center gap-2 cursor-pointer mb-2">
-              <input
-                type="radio"
-                name="payment"
-                value="cash"
-                checked={paymentMethod === "cash"}
-                onChange={() => setPaymentMethod("cash")}
-              />
-              Tiền mặt
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="payment"
-                value="qr"
-                checked={paymentMethod === "qr"}
-                onChange={() => setPaymentMethod("qr")}
-              />
-              Chuyển khoản / QR
-            </label>
-          </div>
-
-          <div className="p-4 bg-gray-50 rounded-lg border space-y-4">
-            <p className="font-medium text-gray-700">Chi tiết hóa đơn</p>
-            {paymentMethod === "qr" && (
-              <>
-                <p className="text-sm text-gray-600">Quét mã QR để thanh toán</p>
-                <div className="flex justify-center bg-white p-4 rounded-lg inline-block">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                      `FreshFoodShop|${totalPrice}|${form.name}|${form.phone}`
-                    )}`}
-                    alt="Mã QR thanh toán"
-                    className="w-48 h-48 object-contain"
-                  />
-                </div>
-              </>
+      <div className="grid md:grid-cols-3 gap-8">
+        {/* Order Form */}
+        <div className="md:col-span-2">
+          <div className="bg-white rounded-lg shadow-md p-6">
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+                {error}
+              </div>
             )}
-            <div className="text-sm text-gray-600 border-t pt-3 mt-3">
-              <p className="font-medium text-gray-800 mb-2">Thông tin hóa đơn</p>
-              <p><span className="text-gray-500">Khách hàng:</span> {form.name || "—"}</p>
-              <p><span className="text-gray-500">SĐT:</span> {form.phone || "—"}</p>
-              <p><span className="text-gray-500">Địa chỉ:</span> {form.address || "—"}</p>
-              <p className="mt-2 font-medium">Sản phẩm:</p>
-              <ul className="list-disc list-inside text-gray-600">
-                {orderItems.map((item) => (
-                  <li key={item.id}>
-                    {item.name} — {item.quantity} {item.unit || "sản phẩm"} × {item.price.toLocaleString()} đ = {(item.price * item.quantity).toLocaleString()} đ
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-2 font-semibold text-gray-800">
-                Tổng thanh toán: {totalPrice.toLocaleString()} đ
-              </p>
-              <p className="text-gray-500">
-                Hình thức thanh toán: {paymentMethod === "cash" ? "Tiền mặt" : "Chuyển khoản / QR"}
-              </p>
-            </div>
-          </div>
 
-          <button
-            type="submit"
-            className="bg-green-600 text-white px-6 py-3 rounded hover:bg-green-700 w-full mt-4"
-          >
-            Xác nhận đặt hàng
-          </button>
-        </form>
+            <form onSubmit={handleSubmitOrder} className="space-y-6">
+              {/* Shipping Address */}
+              <div>
+                <label htmlFor="shipping" className="block text-gray-700 font-medium mb-2">
+                  Địa chỉ giao hàng *
+                </label>
+                <textarea
+                  id="shipping"
+                  name="shippingAddress"
+                  value={formData.shippingAddress}
+                  onChange={handleInputChange}
+                  placeholder="Nhập địa chỉ giao hàng đầy đủ"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  rows="3"
+                  required
+                />
+              </div>
 
-        <div className="border p-6 rounded h-fit space-y-4">
-          <h3 className="text-xl font-bold">Đơn hàng của bạn</h3>
-
-          <ul className="space-y-3 divide-y">
-            {orderItems.map((item) => (
-              <li key={item.id} className="flex gap-3 pt-3 first:pt-0">
-                <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                  <img
-                    src={item.image}
-                    alt={item.name}
-                    className="w-full h-full object-cover"
-                  />
+              {/* Payment Method */}
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">
+                  Phương thức thanh toán
+                </label>
+                <div className="space-y-2">
+                  {[
+                    { value: 'cash', label: 'Thanh toán khi nhận hàng' },
+                    { value: 'transfer', label: 'Chuyển khoản ngân hàng' },
+                    { value: 'card', label: 'Thẻ tín dụng' },
+                  ].map(method => (
+                    <label key={method.value} className="flex items-center">
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value={method.value}
+                        checked={formData.paymentMethod === method.value}
+                        onChange={handleInputChange}
+                        className="w-4 h-4 text-green-600"
+                      />
+                      <span className="ml-2 text-gray-700">{method.label}</span>
+                    </label>
+                  ))}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate">{item.name}</p>
-                  <p className="text-sm text-gray-500">
-                    {item.quantity} {item.unit || "sản phẩm"} × {item.price.toLocaleString()} đ
+              </div>
+
+              {/* Discount Code */}
+              <div>
+                <label htmlFor="discount" className="block text-gray-700 font-medium mb-2">
+                  Mã giảm giá (tùy chọn)
+                </label>
+                <input
+                  id="discount"
+                  type="text"
+                  name="discountCode"
+                  value={formData.discountCode}
+                  onChange={handleInputChange}
+                  placeholder="Nhập mã giảm giá nếu có"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+
+              {/* Order Buttons */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-lg transition duration-200"
+              >
+                {loading ? 'Đang xử lý...' : 'Đặt hàng'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate('/cart')}
+                className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-4 rounded-lg transition duration-200"
+              >
+                Quay lại giỏ hàng
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Order Summary Sidebar */}
+        <div className="md:col-span-1">
+          <div className="bg-white rounded-lg shadow-md p-6 sticky top-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Tóm tắt đơn hàng</h3>
+
+            {/* Cart Items */}
+            <div className="space-y-3 mb-4 max-h-96 overflow-y-auto">
+              {orderItems.map(item => (
+                <div key={item.id} className="flex justify-between text-sm text-gray-600">
+                  <div>
+                    <p className="font-medium text-gray-800">{item.name}</p>
+                    <p className="text-gray-500">x{item.quantity}</p>
+                  </div>
+                  <p className="font-medium">
+                    {((item.price || 0) * (item.quantity || 0)).toLocaleString('vi-VN')}đ
                   </p>
                 </div>
-                <p className="font-medium flex-shrink-0">
-                  {(item.price * item.quantity).toLocaleString()} đ
-                </p>
-              </li>
-            ))}
-          </ul>
+              ))}
+            </div>
 
-          <div className="pt-4 border-t">
-            <h3 className="text-xl font-bold mb-2">Tổng thanh toán</h3>
-            <p className="text-2xl text-green-600 font-bold">
-              {totalPrice.toLocaleString()} đ
-            </p>
+            <hr className="my-4" />
+
+            {/* Totals */}
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between text-gray-600">
+                <span>Tạm tính:</span>
+                <span>{totalPrice.toLocaleString('vi-VN')}đ</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>Phí vận chuyển:</span>
+                <span>{totalPrice > 200000 ? '0đ' : '30.000đ'}</span>
+              </div>
+              <div className="flex justify-between font-bold text-lg text-gray-800 pt-2 border-t">
+                <span>Tổng cộng:</span>
+                <span>
+                  {(totalPrice + (totalPrice > 200000 ? 0 : 30000)).toLocaleString('vi-VN')}đ
+                </span>
+              </div>
+            </div>
+
+            {/* User Info */}
+            <div className="mt-6 pt-4 border-t text-sm text-gray-600">
+              <p><strong>Ghi chú:</strong></p>
+              <p>Đơn hàng sẽ được giao đến:</p>
+              <p className="font-medium text-gray-800 mt-1">{user?.email}</p>
+            </div>
           </div>
         </div>
       </div>

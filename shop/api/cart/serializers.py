@@ -1,11 +1,25 @@
 from rest_framework import serializers
+from django.db.models import Sum
 from shop.models import Cart, CartItem, Product
 
 class ProductInCartSerializer(serializers.ModelSerializer):
     """Serializer for Product in Cart view"""
+    image = serializers.SerializerMethodField()
+    
     class Meta:
         model = Product
         fields = ['id', 'name', 'price', 'image', 'stock']
+    
+    def get_image(self, obj):
+        # Return full image URL
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            else:
+                # Fallback to relative URL path if no request in context
+                return f'/media/{obj.image.name}'
+        return None
 
 class CartItemSerializer(serializers.ModelSerializer):
     """Serializer for Cart Items"""
@@ -31,7 +45,8 @@ class CartSerializer(serializers.ModelSerializer):
         fields = ['id', 'items', 'total_items', 'total_price', 'created_at', 'updated_at']
     
     def get_total_items(self, obj):
-        return obj.items.aggregate(total=serializers.Sum('quantity'))['total'] or 0
+        result = obj.items.aggregate(total=Sum('quantity'))
+        return result['total'] or 0
     
     def get_total_price(self, obj):
         total = 0

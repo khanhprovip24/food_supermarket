@@ -17,7 +17,7 @@ def get_wishlist(request):
     """
     try:
         wishlist_items = Wishlist.objects.filter(user=request.user)
-        serializer = WishlistItemSerializer(wishlist_items, many=True)
+        serializer = WishlistItemSerializer(wishlist_items, many=True, context={'request': request})
         
         return Response({
             'success': True,

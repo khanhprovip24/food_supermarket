@@ -5,6 +5,7 @@ from shop.models import Category, Product, Review
 class CategorySerializer(serializers.ModelSerializer):
     """Serializer for product categories"""
     product_count = serializers.SerializerMethodField()
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = Category
@@ -12,6 +13,16 @@ class CategorySerializer(serializers.ModelSerializer):
 
     def get_product_count(self, obj):
         return obj.product_set.count()
+    
+    def get_image(self, obj):
+        # Return full image URL
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            else:
+                return f'/media/{obj.image.name}'
+        return None
 
 
 class ReviewSerializer(serializers.ModelSerializer):
@@ -34,6 +45,7 @@ class ProductListSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     review_count = serializers.SerializerMethodField()
     average_rating = serializers.SerializerMethodField()
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -48,6 +60,16 @@ class ProductListSerializer(serializers.ModelSerializer):
             total = sum([r.rating for r in reviews])
             return round(total / reviews.count(), 1)
         return 0
+    
+    def get_image(self, obj):
+        # Return full image URL
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            else:
+                return f'/media/{obj.image.name}'
+        return None
 
 
 class ProductDetailSerializer(ProductListSerializer):

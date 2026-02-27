@@ -248,10 +248,12 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 import { useCart } from "../../context/CartContext";
+import { useWishlist } from "../../context/WishlistContext";
 import { useAuth } from "../../context/AuthContext";
 
 const Navbar = () => {
   const { totalItems } = useCart();
+  const { wishlistItems } = useWishlist();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -271,7 +273,7 @@ const Navbar = () => {
   setSearchQuery(value);
 
   if (value.trim() === "") {
-    navigate("/products"); // 🔥 quay về trạng thái ban đầu
+    navigate("/products");
   } else {
     navigate(`/products?search=${value}`);
   }
@@ -347,6 +349,13 @@ const Navbar = () => {
                     onClick={() => setProfileOpen(false)}
                   >
                     Đơn hàng của tôi
+                  </Link>
+                  <Link
+                    to="/wishlist"
+                    className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={() => setProfileOpen(false)}
+                  >
+                    ❤️ Danh sách yêu thích ({wishlistItems.length})
                   </Link>
                   <button
                     type="button"

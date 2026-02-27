@@ -1,90 +1,166 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import MainLayout from "../layouts/MainLayout";
+import { useAuth } from "../context/AuthContext";
 
 const Register = () => {
+  const { register, isLoading, error } = useAuth();
+  const navigate = useNavigate();
   const [form, setForm] = useState({
-    name: "",
+    username: "",
     email: "",
     password: "",
-    confirmPassword: "",
+    password2: "",
+    first_name: "",
+    last_name: "",
   });
+  const [localError, setLocalError] = useState("");
 
   const handleChange = (e) => {
     setForm({
       ...form,
       [e.target.name]: e.target.value,
     });
+    setLocalError("");
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setLocalError("");
 
-    if (form.password !== form.confirmPassword) {
-      alert("Mật khẩu không khớp");
+    // Validation
+    if (!form.username.trim()) {
+      setLocalError("Vui lòng nhập tên đăng nhập");
+      return;
+    }
+    if (!form.email.trim()) {
+      setLocalError("Vui lòng nhập email");
+      return;
+    }
+    if (form.password.length < 6) {
+      setLocalError("Mật khẩu phải ít nhất 6 ký tự");
+      return;
+    }
+    if (form.password !== form.password2) {
+      setLocalError("Mật khẩu không khớp");
       return;
     }
 
-    alert("Đăng ký thành công (demo)");
+    const result = await register({
+      username: form.username,
+      email: form.email,
+      password: form.password,
+      password2: form.password2,
+      first_name: form.first_name,
+      last_name: form.last_name,
+    });
+
+    if (result.success) {
+      navigate("/");
+    } else {
+      const errors = result.errors || {};
+      if (errors.username) {
+        setLocalError(errors.username[0] || "Lỗi tên đăng nhập");
+      } else if (errors.email) {
+        setLocalError(errors.email[0] || "Lỗi email");
+      } else if (errors.password) {
+        setLocalError(errors.password[0] || "Lỗi mật khẩu");
+      } else {
+        setLocalError("Đăng ký thất bại. Vui lòng kiểm tra thông tin");
+      }
+    }
   };
 
   return (
     <MainLayout>
       <div className="min-h-screen flex items-start justify-center bg-gray-50 pt-6 px-4">
-        
         <div className="w-full max-w-sm bg-white shadow-xl rounded-2xl p-8">
-          
-          <h2 className="text-2xl font-bold text-center mb-6">
-            Tạo tài khoản
-          </h2>
+          <h2 className="text-2xl font-bold text-center mb-6">Tạo tài khoản</h2>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            
+          {(localError || error) && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">
+              {localError || error?.detail || "Có lỗi xảy ra"}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-3">
             <div>
               <label className="block text-sm font-medium mb-1">
-                Họ và tên
+                Tên đăng nhập
               </label>
               <input
                 type="text"
-                name="name"
-                value={form.name}
+                name="username"
+                value={form.username}
                 onChange={handleChange}
+                disabled={isLoading}
                 required
-                placeholder="Nhập họ và tên"
+                placeholder="Nhập tên đăng nhập"
                 className="w-full border border-gray-300 p-2.5 rounded-lg 
-                           focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                           focus:outline-none focus:ring-2 focus:ring-green-500 transition
+                           disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">
-                Email
-              </label>
+              <label className="block text-sm font-medium mb-1">Họ</label>
+              <input
+                type="text"
+                name="first_name"
+                value={form.first_name}
+                onChange={handleChange}
+                disabled={isLoading}
+                placeholder="Nhập họ"
+                className="w-full border border-gray-300 p-2.5 rounded-lg 
+                           focus:outline-none focus:ring-2 focus:ring-green-500 transition
+                           disabled:bg-gray-100 disabled:cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Tên</label>
+              <input
+                type="text"
+                name="last_name"
+                value={form.last_name}
+                onChange={handleChange}
+                disabled={isLoading}
+                placeholder="Nhập tên"
+                className="w-full border border-gray-300 p-2.5 rounded-lg 
+                           focus:outline-none focus:ring-2 focus:ring-green-500 transition
+                           disabled:bg-gray-100 disabled:cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Email</label>
               <input
                 type="email"
                 name="email"
                 value={form.email}
                 onChange={handleChange}
+                disabled={isLoading}
                 required
                 placeholder="Nhập email"
                 className="w-full border border-gray-300 p-2.5 rounded-lg 
-                           focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                           focus:outline-none focus:ring-2 focus:ring-green-500 transition
+                           disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">
-                Mật khẩu
-              </label>
+              <label className="block text-sm font-medium mb-1">Mật khẩu</label>
               <input
                 type="password"
                 name="password"
                 value={form.password}
                 onChange={handleChange}
+                disabled={isLoading}
                 required
-                placeholder="Nhập mật khẩu"
+                placeholder="Nhập mật khẩu (ít nhất 6 ký tự)"
                 className="w-full border border-gray-300 p-2.5 rounded-lg 
-                           focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                           focus:outline-none focus:ring-2 focus:ring-green-500 transition
+                           disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
             </div>
 
@@ -94,23 +170,27 @@ const Register = () => {
               </label>
               <input
                 type="password"
-                name="confirmPassword"
-                value={form.confirmPassword}
+                name="password2"
+                value={form.password2}
                 onChange={handleChange}
+                disabled={isLoading}
                 required
                 placeholder="Nhập lại mật khẩu"
                 className="w-full border border-gray-300 p-2.5 rounded-lg 
-                           focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                           focus:outline-none focus:ring-2 focus:ring-green-500 transition
+                           disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
             </div>
 
             <button
               type="submit"
+              disabled={isLoading}
               className="w-full bg-green-600 hover:bg-green-700 
                          text-white font-semibold py-2.5 
-                         rounded-lg transition duration-200"
+                         rounded-lg transition duration-200
+                         disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              Đăng ký
+              {isLoading ? "Đang đăng ký..." : "Đăng ký"}
             </button>
           </form>
 
@@ -123,7 +203,6 @@ const Register = () => {
               Đăng nhập
             </Link>
           </p>
-
         </div>
       </div>
     </MainLayout>

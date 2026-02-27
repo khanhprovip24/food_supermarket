@@ -36,6 +36,12 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
             return OrderStatusUpdateSerializer
         return OrderListSerializer
     
+    def get_serializer_context(self):
+        """Add request to serializer context for image URL building"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+    
     @action(detail=False, methods=['post'])
     def create_from_cart(self, request):
         """
@@ -44,12 +50,19 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         POST /api/orders/create_from_cart/
         {
             "shipping_address": "123 Main St",
-            "payment_method": "COD",
+            "payment_method": "cash",
             "discount_code": "SAVE10" (optional)
         }
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"Creating order for user: {request.user}")
+        logger.info(f"Request data: {request.data}")
+        
         serializer = OrderCreateSerializer(data=request.data)
         if not serializer.is_valid():
+            logger.error(f"Serializer validation failed: {serializer.errors}")
             return Response({
                 'success': False,
                 'errors': serializer.errors
@@ -117,13 +130,19 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
                 # Clear cart after successful order
                 cart.items.all().delete()
                 
+                logger.info(f"Order created successfully: {order.id}")
+                
                 return Response({
                     'success': True,
                     'message': 'Order created successfully',
-                    'order': OrderDetailSerializer(order).data
+                    'id': order.id,
+                    'order': OrderDetailSerializer(order, context={'request': request}).data
                 }, status=status.HTTP_201_CREATED)
         
         except Exception as e:
+            import traceback
+            logger.error(f"Error creating order: {str(e)}")
+            logger.error(traceback.format_exc())
             return Response({
                 'success': False,
                 'message': str(e)
@@ -155,7 +174,7 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({
                 'success': True,
                 'message': 'Order status updated',
-                'order': OrderDetailSerializer(order).data
+                'order': OrderDetailSerializer(order, context={'request': request}).data
             }, status=status.HTTP_200_OK)
         
         except Exception as e:
