@@ -31,6 +31,15 @@ def add_to_cart(request):
         product_id = request.data.get('product_id')
         quantity = request.data.get('quantity', 1)
         
+        # Validate and convert quantity to int
+        try:
+            quantity = int(quantity)
+        except (ValueError, TypeError):
+            return Response({
+                'success': False,
+                'message': 'quantity must be a valid integer'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         logger.info(f"Product ID: {product_id}, Quantity: {quantity}")
         
         if not product_id:
@@ -121,14 +130,14 @@ def get_cart(request):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(['DELETE'])
+@api_view(['POST', 'DELETE'])
 @csrf_exempt
 @permission_classes([IsAuthenticated])
 def remove_from_cart(request):
     """
     Remove product from cart
     
-    DELETE /api/cart/remove/
+    POST /api/cart/remove/ or DELETE /api/cart/remove/
     {
         "product_id": 1
     }
@@ -161,6 +170,94 @@ def remove_from_cart(request):
     except Exception as e:
         import traceback
         logger.error(f"Error in remove_from_cart: {str(e)}")
+        logger.error(traceback.format_exc())
+        return Response({
+            'success': False,
+            'message': str(e)
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@csrf_exempt
+@permission_classes([IsAuthenticated])
+def update_quantity(request):
+    """
+    Update product quantity in cart
+    
+    POST /api/cart/update-quantity/
+    {
+        "product_id": 1,
+        "quantity": 5
+    }
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        logger.info(f"Updating quantity for user: {request.user}")
+        product_id = request.data.get('product_id')
+        quantity = request.data.get('quantity')
+        
+        logger.info(f"Product ID: {product_id}, New Quantity: {quantity}")
+        
+        if not product_id or quantity is None:
+            return Response({
+                'success': False,
+                'message': 'product_id and quantity are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate quantity
+        try:
+            quantity = int(quantity)
+        except (ValueError, TypeError):
+            return Response({
+                'success': False,
+                'message': 'quantity must be a valid integer'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if quantity < 0:
+            return Response({
+                'success': False,
+                'message': 'quantity cannot be negative'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if quantity == 0:
+            # If quantity is 0, remove the item
+            cart = get_object_or_404(Cart, user=request.user)
+            cart_item = get_object_or_404(CartItem, cart=cart, product_id=product_id)
+            cart_item.delete()
+            return Response({
+                'success': True,
+                'message': 'Product removed from cart',
+                'cart': CartSerializer(cart, context={'request': request}).data
+            }, status=status.HTTP_200_OK)
+        
+        product = get_object_or_404(Product, id=product_id)
+        
+        if product.stock < quantity:
+            return Response({
+                'success': False,
+                'message': f'Not enough stock. Available: {product.stock}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        cart = get_object_or_404(Cart, user=request.user)
+        cart_item = get_object_or_404(CartItem, cart=cart, product_id=product_id)
+        
+        # Update quantity directly
+        cart_item.quantity = quantity
+        cart_item.save()
+        
+        logger.info(f"Quantity updated to: {quantity}")
+        
+        return Response({
+            'success': True,
+            'message': 'Product quantity updated',
+            'cart': CartSerializer(cart, context={'request': request}).data
+        }, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        import traceback
+        logger.error(f"Error in update_quantity: {str(e)}")
         logger.error(traceback.format_exc())
         return Response({
             'success': False,

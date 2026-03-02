@@ -256,7 +256,6 @@ const Navbar = () => {
   const { wishlistItems } = useWishlist();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
 
@@ -268,17 +267,6 @@ const Navbar = () => {
     return () => document.removeEventListener("click", handleClickOutside);
   }, []);
 
-  const handleSearchChange = (e) => {
-  const value = e.target.value;
-  setSearchQuery(value);
-
-  if (value.trim() === "") {
-    navigate("/products");
-  } else {
-    navigate(`/products?search=${value}`);
-  }
-  };
-
 
   return (
     <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md shadow-sm">
@@ -289,21 +277,17 @@ const Navbar = () => {
           🌱Fresh Market
         </Link>
 
-        {/* Search Bar */}
-        <div className="flex-1 max-w-xl">
-  <input
-    type="text"
-    placeholder="Tìm kiếm sản phẩm..."
-    value={searchQuery}
-    onChange={handleSearchChange}
-    className="w-full px-5 py-2 rounded-full border border-gray-300 
-               focus:outline-none focus:ring-2 focus:ring-primary"
-  />
-</div>
+        {/* Search Button */}
+        <button
+          onClick={() => navigate("/products?search=")}
+          className="px-6 py-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors font-medium whitespace-nowrap ml-4"
+        >
+          🔍 Tìm kiếm sản phẩm
+        </button>
 
 
         {/* Navigation */}
-        <nav className="flex items-center gap-8 whitespace-nowrap">
+        <nav className="flex items-center gap-8 whitespace-nowrap ml-auto">
 
           <Link to="/products" className="hover:text-primary transition font-medium">
             Sản phẩm

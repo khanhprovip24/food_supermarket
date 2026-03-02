@@ -74,8 +74,13 @@ class ProductListSerializer(serializers.ModelSerializer):
 
 class ProductDetailSerializer(ProductListSerializer):
     """Serializer for product detail view"""
-    reviews = ReviewSerializer(source='review_set', many=True, read_only=True)
+    reviews = serializers.SerializerMethodField()
     description = serializers.CharField()
 
     class Meta(ProductListSerializer.Meta):
         fields = ProductListSerializer.Meta.fields + ['description', 'reviews', 'created_at']
+
+    def get_reviews(self, obj):
+        """Get all reviews for the product, ordered by newest first"""
+        reviews = obj.review_set.all().order_by('-created_at')
+        return ReviewSerializer(reviews, many=True).data

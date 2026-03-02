@@ -73,6 +73,10 @@ class ProductViewSet(viewsets.ModelViewSet):
         return ProductListSerializer
 
     def get_permissions(self):
+        # Special handling for add_review action
+        if self.action == 'add_review':
+            return [IsAuthenticated()]
+        
         if self.request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
             return [IsAdminUser()]
         return [AllowAny()]
@@ -92,44 +96,55 @@ class ProductViewSet(viewsets.ModelViewSet):
             'reviews': serializer.data
         }, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    @action(detail=True, methods=['post'])
     def add_review(self, request, pk=None):
         """
-        Add a review to a product
+        Add a new review for a product
         POST /api/products/<id>/add_review/
+        
+        Requires authentication via session or token
+        
+        Request Body:
         {
-            "rating": 5,
-            "comment": "Great product!"
+            "rating": 1-5,
+            "comment": "Your review text"
+        }
+        
+        Response:
+        {
+            "success": true,
+            "message": "Review added!",
+            "review": {...}
         }
         """
+        # Check if user is authenticated
+        if not request.user or not request.user.is_authenticated:
+            return Response({
+                'success': False,
+                'message': 'Authentication required. Please login first.',
+                'error_code': 'NOT_AUTHENTICATED'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        
         product = self.get_object()
+
+        # Always create a new review (allow multiple reviews per user per product)
+        serializer = ReviewSerializer(
+            data=request.data,
+            context={'request': request, 'product': product}
+        )
         
-        # Check if user already reviewed this product
-        existing_review = Review.objects.filter(product=product, user=request.user).first()
-        
-        serializer = ReviewSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            if existing_review:
-                # Update existing review
-                existing_review.rating = serializer.validated_data.get('rating', existing_review.rating)
-                existing_review.comment = serializer.validated_data.get('comment', existing_review.comment)
-                existing_review.save()
-                return Response({
-                    'success': True,
-                    'message': 'Review updated!',
-                    'review': ReviewSerializer(existing_review).data
-                }, status=status.HTTP_200_OK)
-            else:
-                # Create new review
-                serializer.save(product=product, user=request.user)
-                return Response({
-                    'success': True,
-                    'message': 'Review added!',
-                    'review': serializer.data
-                }, status=status.HTTP_201_CREATED)
+            review = serializer.save(product=product, user=request.user)
+            
+            return Response({
+                'success': True,
+                'message': 'Review added!',
+                'review': ReviewSerializer(review).data
+            }, status=status.HTTP_201_CREATED)
         
         return Response({
             'success': False,
+            'message': 'Invalid review data',
             'errors': serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
@@ -138,34 +153,35 @@ class ReviewViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing reviews
     
-    GET /api/reviews/          - List all reviews
-    GET /api/reviews/<id>/     - Get review details  
-    PUT /api/reviews/<id>/     - Update review (owner only)
-    DELETE /api/reviews/<id>/  - Delete review (owner only)
+    GET /api/reviews/           - List all reviews
+    GET /api/reviews/<id>/      - Get review details
+    POST /api/reviews/          - Create review (authenticated)
+    PUT /api/reviews/<id>/      - Update own review (authenticated)
+    PATCH /api/reviews/<id>/    - Partial update of own review (authenticated)
+    DELETE /api/reviews/<id>/   - Delete own review (authenticated)
     """
     serializer_class = ReviewSerializer
 
     def get_queryset(self):
-        return Review.objects.all()
+        return Review.objects.all().select_related('user', 'product')
 
     def get_permissions(self):
         if self.request.method == 'GET':
             return [AllowAny()]
-        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
-            return [IsAuthenticated()]
         return [IsAuthenticated()]
 
     def perform_create(self, serializer):
+        """Create a new review (allow multiple reviews per user per product)"""
         serializer.save(user=self.request.user)
 
     def perform_update(self, serializer):
+        """Update only if the user is the review owner or is admin"""
+        if serializer.instance.user != self.request.user and not self.request.user.is_staff:
+            raise PermissionError('You can only update your own reviews')
         serializer.save(user=self.request.user)
 
     def perform_destroy(self, instance):
-        if instance.user == self.request.user or self.request.user.is_staff:
-            instance.delete()
-        else:
-            return Response({
-                'success': False,
-                'error': 'You can only delete your own reviews'
-            }, status=status.HTTP_403_FORBIDDEN)
+        """Delete only if the user is the review owner or is admin"""
+        if instance.user != self.request.user and not self.request.user.is_staff:
+            raise PermissionError('You can only delete your own reviews')
+        instance.delete()

@@ -77,7 +77,7 @@ const Cart = () => {
                       className="w-4 h-4 rounded border-gray-300"
                     />
                   </label>
-                  <div className="flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden bg-gray-100">
+                  <div className="flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden bg-gray-100 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => navigate(`/products/${item.id}`)}>
                     <img
                       src={item.image}
                       alt={item.name}
@@ -85,7 +85,10 @@ const Cart = () => {
                     />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-semibold text-lg text-gray-800">
+                    <h3
+                      onClick={() => navigate(`/products/${item.id}`)}
+                      className="font-semibold text-lg text-gray-800 cursor-pointer hover:text-green-600 transition-colors"
+                    >
                       {item.name}
                     </h3>
                     {item.unit && (

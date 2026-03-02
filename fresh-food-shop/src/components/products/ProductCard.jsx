@@ -206,7 +206,7 @@
 // export default ProductCard;
 
 import { useState } from "react";
-import { Heart, ShoppingCart } from "lucide-react";
+import { Heart, ShoppingCart, Star } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
@@ -319,6 +319,29 @@ const ProductCard = ({ product }) => {
         <h3 className="font-semibold text-lg text-gray-900 mb-2 line-clamp-2 group-hover:text-green-600 transition-colors">
           {product.name}
         </h3>
+
+        {/* Rating & Review Count */}
+        <div className="flex items-center gap-2 mb-3">
+          <div className="flex gap-0.5">
+            {[...Array(5)].map((_, i) => (
+              <Star
+                key={i}
+                size={16}
+                className={`${
+                  i < Math.round(product.average_rating || 0)
+                    ? 'fill-yellow-400 text-yellow-400'
+                    : 'text-gray-300'
+                }`}
+              />
+            ))}
+          </div>
+          <span className="text-sm font-semibold text-gray-700">
+            {product.average_rating ? product.average_rating.toFixed(1) : '0'}
+          </span>
+          <span className="text-xs text-gray-500">
+            ({product.review_count || 0} đánh giá)
+          </span>
+        </div>
 
         {/* Price & Stock */}
         <div className="flex items-center justify-between mb-4">

@@ -108,6 +108,14 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
                             'message': 'Invalid discount code'
                         }, status=status.HTTP_400_BAD_REQUEST)
                 
+                # Check if all items have enough stock
+                for item in cart.items.all():
+                    if item.product.stock < item.quantity:
+                        return Response({
+                            'success': False,
+                            'message': f'Not enough stock for {item.product.name}. Available: {item.product.stock}, Requested: {item.quantity}'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                
                 # Create order
                 order = Order.objects.create(
                     user=request.user,
@@ -126,6 +134,11 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
                         quantity=cart_item.quantity,
                         price=cart_item.product.price
                     )
+                    
+                    # Reduce product stock
+                    cart_item.product.stock -= cart_item.quantity
+                    cart_item.product.save()
+                    logger.info(f"Updated stock for product {cart_item.product.id}: -{cart_item.quantity}")
                 
                 # Clear cart after successful order
                 cart.items.all().delete()
@@ -181,4 +194,46 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({
                 'success': False,
                 'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """
+        Cancel order - only allowed for pending or processing orders
+        
+        POST /api/orders/<id>/cancel/
+        """
+        order = self.get_object()
+        
+        # Check if order can be cancelled
+        if order.status not in ['pending', 'processing']:
+            return Response({
+                'success': False,
+                'message': f'Không thể hủy đơn hàng ở trạng thái {order.get_status_display()}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            with transaction.atomic():
+                # Restore stock for all items in the order
+                for item in order.items.all():
+                    item.product.stock += item.quantity
+                    item.product.save()
+                
+                # Update order status to cancelled
+                order.status = 'cancelled'
+                order.save()
+                
+                return Response({
+                    'success': True,
+                    'message': 'Đơn hàng đã được hủy',
+                    'order': OrderDetailSerializer(order, context={'request': request}).data
+                }, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            import traceback
+            print(f"Error cancelling order: {str(e)}")
+            print(traceback.format_exc())
+            return Response({
+                'success': False,
+                'message': f'Lỗi khi hủy đơn hàng: {str(e)}'
             }, status=status.HTTP_400_BAD_REQUEST)

@@ -158,10 +158,10 @@ const productService = {
    */
   addReview: async (productId, reviewData) => {
     try {
-      console.log(`Submitting review for product ${productId}:`, reviewData);
       const response = await api.post(
         API_ENDPOINTS.PRODUCTS.ADD_REVIEW(productId),
-        reviewData
+        { product: productId, ...reviewData }
+        // Session cookie will be automatically sent with request (withCredentials: true in api.js)
       );
       console.log(`Review submitted successfully:`, response.data);
       return {

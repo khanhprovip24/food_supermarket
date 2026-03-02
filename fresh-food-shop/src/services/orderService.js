@@ -110,9 +110,7 @@ const orderService = {
   cancelOrder: async (orderId) => {
     try {
       console.log(`Cancelling order ${orderId}...`);
-      const response = await api.patch(`${API_ENDPOINTS.ORDERS.LIST}${orderId}/`, {
-        status: 'cancelled',
-      });
+      const response = await api.post(`${API_ENDPOINTS.ORDERS.LIST}${orderId}/cancel/`);
       console.log('Order cancelled:', response.data);
       return {
         success: true,

@@ -56,6 +56,14 @@ export const API_ENDPOINTS = {
     ORDERS: '/admin/orders/',
     USERS: '/admin/users/',
   },
+  // // Reviews
+  // REVIEWS: {
+  //   LIST: '/reviews/',
+  //   DETAIL: (id) => `/reviews/${id}/`,
+  //   CREATE: '/reviews/create/',
+  //   UPDATE: (id) => `/reviews/${id}/update/`,
+  //   DELETE: (id) => `/reviews/${id}/delete/`,
+  // },
 };
 
 // Categories list (for filter)

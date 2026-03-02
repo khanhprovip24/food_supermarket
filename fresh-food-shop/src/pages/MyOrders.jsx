@@ -12,6 +12,8 @@ export default function MyOrders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [canceling, setCanceling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -60,13 +62,45 @@ export default function MyOrders() {
     }
   };
 
+  const handleCancelOrder = async (e) => {
+    e.stopPropagation();
+    
+    if (!selectedOrder) return;
+    
+    if (!window.confirm('Bạn có chắc chắn muốn hủy đơn hàng này?')) {
+      return;
+    }
+    
+    setCanceling(true);
+    setCancelError(null);
+    
+    const result = await orderService.cancelOrder(selectedOrder.id);
+    
+    if (result.success) {
+      console.log('Order cancelled successfully');
+      // Update the selected order with new status
+      setSelectedOrder(result.data);
+      // Reload orders list
+      await loadOrders();
+    } else {
+      const errorMsg = result.error || "Không thể hủy đơn hàng";
+      console.error("Error cancelling order:", errorMsg);
+      setCancelError(errorMsg);
+    }
+    
+    setCanceling(false);
+  };
+
   const getStatusBadgeColor = (status) => {
     const statusMap = {
       'pending': 'bg-yellow-100 text-yellow-800',
+      'processing': 'bg-blue-100 text-blue-800',
+      'shipping': 'bg-purple-100 text-purple-800',
+      'completed': 'bg-green-100 text-green-800',
+      'cancelled': 'bg-red-100 text-red-800',
       'confirmed': 'bg-blue-100 text-blue-800',
       'shipped': 'bg-purple-100 text-purple-800',
       'delivered': 'bg-green-100 text-green-800',
-      'cancelled': 'bg-red-100 text-red-800',
     };
     return statusMap[status] || 'bg-gray-100 text-gray-800';
   };
@@ -74,12 +108,19 @@ export default function MyOrders() {
   const getStatusLabel = (status) => {
     const statusLabels = {
       'pending': 'Chờ xác nhận',
+      'processing': 'Đang xử lý',
+      'shipping': 'Đang giao hàng',
+      'completed': 'Hoàn thành',
+      'cancelled': 'Đã hủy',
       'confirmed': 'Đã xác nhận',
       'shipped': 'Đang giao',
       'delivered': 'Đã giao',
-      'cancelled': 'Đã hủy',
     };
     return statusLabels[status] || status;
+  };
+
+  const canCancelOrder = (order) => {
+    return order && ['pending', 'processing'].includes(order.status);
   };
 
   const getPaymentMethodLabel = (method) => {
@@ -237,12 +278,30 @@ export default function MyOrders() {
                 </div>
               </div>
 
-              <button
-                onClick={() => setSelectedOrder(null)}
-                className="mt-6 w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition"
-              >
-                Đóng
-              </button>
+              {cancelError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+                  <p className="font-semibold">Lỗi:</p>
+                  <p>{cancelError}</p>
+                </div>
+              )}
+
+              <div className="flex gap-3 mt-6">
+                {canCancelOrder(selectedOrder) && (
+                  <button
+                    onClick={handleCancelOrder}
+                    disabled={canceling}
+                    className="flex-1 bg-red-500 hover:bg-red-600 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-lg transition"
+                  >
+                    {canceling ? 'Đang hủy...' : 'Hủy đơn hàng'}
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedOrder(null)}
+                  className={canCancelOrder(selectedOrder) ? "flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition" : "w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition"}
+                >
+                  Đóng
+                </button>
+              </div>
             </div>
           </div>
         )}
