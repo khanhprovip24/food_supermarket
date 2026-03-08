@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from decimal import Decimal
 
 from shop.models import Order, OrderItem, Cart, CartItem, Product, Discount
 from shop.api.orders.serializers import (
@@ -63,8 +64,17 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = OrderCreateSerializer(data=request.data)
         if not serializer.is_valid():
             logger.error(f"Serializer validation failed: {serializer.errors}")
+            # Return more detailed error message
+            error_messages = []
+            for field, errors in serializer.errors.items():
+                if isinstance(errors, list):
+                    error_messages.extend(errors)
+                else:
+                    error_messages.append(str(errors))
+            
             return Response({
                 'success': False,
+                'message': 'Lỗi xác thực: ' + ', '.join(error_messages),
                 'errors': serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
         
@@ -93,19 +103,71 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
                 
                 # Handle discount if provided
                 discount = None
-                discount_code = serializer.validated_data.get('discount_code')
+                discount_code = serializer.validated_data.get('discount_code', '').strip()
+                discount_value = 0
+                
                 if discount_code:
+                    logger.info(f"Processing discount code: {discount_code}")
                     try:
-                        discount = Discount.objects.get(code=discount_code)
-                        if discount.is_percentage:
-                            discount_value = (total_amount * discount.value) / 100
-                        else:
-                            discount_value = discount.value
-                        total_amount = max(0, total_amount - discount_value)
+                        # Try case-insensitive search
+                        discount = Discount.objects.get(code__iexact=discount_code)
+                        logger.info(f"Discount found: {discount.code}")
+                        
+                        # Validate discount is active
+                        if not discount.is_active:
+                            logger.warning(f"Discount {discount.code} is not active")
+                            return Response({
+                                'success': False,
+                                'message': 'Mã giảm giá này đã bị vô hiệu hóa'
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        # Validate discount date range
+                        from django.utils import timezone
+                        now = timezone.now()
+                        if now < discount.valid_from:
+                            logger.warning(f"Discount {discount.code} has not started yet")
+                            return Response({
+                                'success': False,
+                                'message': f'Mã giảm giá chưa có hiệu lực (bắt đầu: {discount.valid_from.strftime("%d/%m/%Y")})'
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        if now > discount.valid_to:
+                            logger.warning(f"Discount {discount.code} has expired")
+                            return Response({
+                                'success': False,
+                                'message': f'Mã giảm giá đã hết hạn (kết thúc: {discount.valid_to.strftime("%d/%m/%Y")})'
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        # Validate usage limit
+                        if discount.usage_count >= discount.usage_limit:
+                            logger.warning(f"Discount {discount.code} usage limit reached: {discount.usage_count}/{discount.usage_limit}")
+                            return Response({
+                                'success': False,
+                                'message': f'Mã giảm giá đã hết lượt sử dụng ({discount.usage_count}/{discount.usage_limit})'
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        # Calculate discount value
+                        try:
+                            discount_value = Decimal(str(discount.value))
+                            if discount.is_percentage:
+                                discount_value = (total_amount * discount_value) / Decimal('100')
+                                logger.info(f"Applied percentage discount: {discount.value}% = {discount_value}đ")
+                            else:
+                                logger.info(f"Applied fixed discount: {discount_value}đ")
+                            
+                            total_amount = max(Decimal('0'), total_amount - discount_value)
+                        except (ValueError, TypeError) as e:
+                            logger.error(f"Error calculating discount value: {str(e)}")
+                            return Response({
+                                'success': False,
+                                'message': 'Lỗi trong tính toán giảm giá'
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                        
                     except Discount.DoesNotExist:
+                        logger.warning(f"Discount code not found: {discount_code}")
                         return Response({
                             'success': False,
-                            'message': 'Invalid discount code'
+                            'message': f'Mã giảm giá "{discount_code}" không tồn tại'
                         }, status=status.HTTP_400_BAD_REQUEST)
                 
                 # Check if all items have enough stock
@@ -143,6 +205,13 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
                 # Clear cart after successful order
                 cart.items.all().delete()
                 
+                # Increment discount usage count if applied
+                if discount:
+                    discount.usage_count += 1
+                    discount.save()
+                    logger.info(f"Discount {discount.code} usage count: {discount.usage_count}/{discount.usage_limit}")
+                
+                
                 logger.info(f"Order created successfully: {order.id}")
                 
                 return Response({
@@ -159,6 +228,102 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({
                 'success': False,
                 'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def validate_discount(self, request):
+        """
+        Validate discount code and return discount details
+        
+        POST /api/orders/validate_discount/
+        {
+            "discount_code": "FRESH10",
+            "total_amount": 100000 (optional, for calculating discount amount)
+        }
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        discount_code = request.data.get('discount_code', '').strip()
+        total_amount = request.data.get('total_amount', 0)
+        
+        if not discount_code:
+            return Response({
+                'success': False,
+                'message': 'Vui lòng nhập mã giảm giá'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Find discount by code (case-insensitive)
+            discount = Discount.objects.get(code__iexact=discount_code)
+            logger.info(f"Found discount: {discount.code}")
+            
+            # Check if discount is active
+            if not discount.is_active:
+                logger.warning(f"Discount {discount.code} is inactive")
+                return Response({
+                    'success': False,
+                    'message': 'Mã giảm giá này đã bị tắt'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check date validity
+            from django.utils import timezone
+            now = timezone.now()
+            if now < discount.valid_from:
+                logger.warning(f"Discount {discount.code} not yet valid")
+                return Response({
+                    'success': False,
+                    'message': f'Mã giảm giá sẽ có hiệu lực từ {discount.valid_from.strftime("%d/%m/%Y")}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if now > discount.valid_to:
+                logger.warning(f"Discount {discount.code} expired")
+                return Response({
+                    'success': False,
+                    'message': 'Mã giảm giá này đã hết hiệu lực'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check usage limit
+            if discount.usage_count >= discount.usage_limit:
+                logger.warning(f"Discount {discount.code} usage limit exceeded")
+                return Response({
+                    'success': False,
+                    'message': f'Mã giảm giá đã hết lượt sử dụng ({discount.usage_count}/{discount.usage_limit})'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Calculate discount value
+            discount_value = Decimal(str(discount.value))
+            if discount.is_percentage:
+                total_as_decimal = Decimal(str(total_amount))
+                discount_amount = (total_as_decimal * discount_value) / Decimal('100')
+            else:
+                discount_amount = discount_value
+            
+            # Return success with discount details
+            return Response({
+                'success': True,
+                'message': 'Mã giảm giá hợp lệ',
+                'discount': {
+                    'code': discount.code,
+                    'value': float(discount.value),
+                    'is_percentage': discount.is_percentage,
+                    'discount_amount': float(discount_amount),
+                    'remaining_uses': discount.usage_limit - discount.usage_count
+                }
+            }, status=status.HTTP_200_OK)
+        
+        except Discount.DoesNotExist:
+            logger.warning(f"Discount not found: {discount_code}")
+            return Response({
+                'success': False,
+                'message': 'Mã giảm giá không tồn tại'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        except Exception as e:
+            logger.error(f"Error validating discount: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Lỗi kiểm tra mã giảm giá'
             }, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=True, methods=['put'])

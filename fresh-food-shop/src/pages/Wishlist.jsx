@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
 import { useAuth } from "../context/AuthContext";
 import { useWishlist } from "../context/WishlistContext";
+import { formatPrice } from "../utils/formatters";
 
 export default function Wishlist() {
   const { user, isAuthenticated } = useAuth();
@@ -75,7 +76,7 @@ export default function Wishlist() {
                   </Link>
 
                   <p className="text-green-600 font-bold text-lg mb-2">
-                    {(item.product?.price || 0).toLocaleString('vi-VN')}đ
+                    {formatPrice(item.product?.price || 0)}
                   </p>
 
                   <p className={`text-sm mb-4 ${

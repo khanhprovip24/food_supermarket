@@ -40,6 +40,7 @@ export const API_ENDPOINTS = {
     DETAIL: (id) => `/orders/${id}/`,
     UPDATE: (id) => `/orders/${id}/`,
     CANCEL: (id) => `/orders/${id}/cancel/`,
+    VALIDATE_DISCOUNT: '/orders/validate_discount/',
   },
 
   // Wishlist

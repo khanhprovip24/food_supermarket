@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
 import { useAuth } from "../context/AuthContext";
 import orderService from "../services/orderService";
+import { formatPrice, formatDate } from "../utils/formatters";
 
 export default function MyOrders() {
   const { user, isAuthenticated } = useAuth();
@@ -191,12 +192,12 @@ export default function MyOrders() {
                   <div>
                     <p className="font-mono font-semibold text-gray-800">#{order.id}</p>
                     <p className="text-sm text-gray-500 mt-1">
-                      {order.created_at ? new Date(order.created_at).toLocaleString("vi-VN") : "—"}
+                      {formatDate(order.created_at)}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-green-600">
-                      {(order.total_amount || order.total_price || 0).toLocaleString('vi-VN')}đ
+                      {formatPrice(order.total_amount || order.total_price || 0)}
                     </p>
                     <span className={`inline-block mt-2 px-3 py-1 rounded text-sm font-medium ${getStatusBadgeColor(order.status)}`}>
                       {getStatusLabel(order.status)}
@@ -222,7 +223,7 @@ export default function MyOrders() {
                 <div>
                   <h2 className="text-2xl font-bold text-gray-800">Đơn hàng #{selectedOrder.id}</h2>
                   <p className="text-gray-600 mt-1">
-                    {selectedOrder.created_at && new Date(selectedOrder.created_at).toLocaleString("vi-VN")}
+                    {selectedOrder.created_at && formatDate(selectedOrder.created_at)}
                   </p>
                 </div>
                 <span className={`px-3 py-1 rounded text-sm font-medium ${getStatusBadgeColor(selectedOrder.status)}`}>
@@ -240,9 +241,9 @@ export default function MyOrders() {
                         <div key={item.id} className="flex justify-between">
                           <div>
                             <p className="font-medium text-gray-800">{item.product?.name || item.product_name || 'Sản phẩm'}</p>
-                            <p className="text-sm text-gray-600">{item.quantity} x {(item.price || 0).toLocaleString('vi-VN')}đ</p>
+                            <p className="text-sm text-gray-600">{item.quantity} x {formatPrice(item.price || 0)}</p>
                           </div>
-                          <p className="font-medium">{((item.quantity || 1) * (item.price || 0)).toLocaleString('vi-VN')}đ</p>
+                          <p className="font-medium">{formatPrice((item.quantity || 1) * (item.price || 0))}</p>
                         </div>
                       ))
                     ) : (
@@ -269,11 +270,11 @@ export default function MyOrders() {
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <div className="flex justify-between text-gray-700 mb-2">
                     <span>Tạm tính:</span>
-                    <span>{selectedOrder.subtotal ? (selectedOrder.subtotal).toLocaleString('vi-VN') : (selectedOrder.total_amount || 0).toLocaleString('vi-VN')}đ</span>
+                    <span>{formatPrice(selectedOrder.subtotal || selectedOrder.total_amount || 0)}</span>
                   </div>
                   <div className="flex justify-between text-gray-700">
                     <span>Tổng cộng:</span>
-                    <span className="font-bold text-lg text-green-600">{(selectedOrder.total_amount || 0).toLocaleString('vi-VN')}đ</span>
+                    <span className="font-bold text-lg text-green-600">{formatPrice(selectedOrder.total_amount || 0)}</span>
                   </div>
                 </div>
               </div>

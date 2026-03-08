@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import orderService from '../services/orderService';
+import { formatPrice } from '../utils/formatters';
 import MainLayout from '../layouts/MainLayout';
 
 const Checkout = () => {
@@ -25,6 +26,13 @@ const Checkout = () => {
   const [success, setSuccess] = useState(false);
   const [orderId, setOrderId] = useState(null);
 
+  // Discount validation state
+  const [validatingDiscount, setValidatingDiscount] = useState(false);
+  const [discountData, setDiscountData] = useState(null);
+  const [discountMessage, setDiscountMessage] = useState('');
+  const [discountError, setDiscountError] = useState('');
+  const discountTimeoutRef = useRef(null);
+
   // Filter cart items to only include selected ones
   const orderItems = selectedIds.length > 0
     ? cartItems.filter((item) => selectedIds.includes(item.id))
@@ -34,6 +42,17 @@ const Checkout = () => {
     (sum, item) => sum + (item.price || 0) * (item.quantity || 0),
     0
   );
+
+  const shippingFee = totalPrice > 200000 ? 0 : 30000;
+  const subtotal = totalPrice + shippingFee;
+  
+  // Calculate discount amount
+  let discountAmount = 0;
+  if (discountData) {
+    discountAmount = discountData.discount_amount || 0;
+  }
+  
+  const finalTotal = Math.max(0, subtotal - discountAmount);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -49,12 +68,57 @@ const Checkout = () => {
     }
   }, [loading, success, orderItems.length, navigate]);
 
+  // Debounced discount code validation
+  const validateDiscountCode = async (code) => {
+    if (!code.trim()) {
+      setDiscountData(null);
+      setDiscountMessage('');
+      setDiscountError('');
+      return;
+    }
+
+    setValidatingDiscount(true);
+    setDiscountError('');
+    setDiscountMessage('');
+
+    const result = await orderService.validateDiscount(code, subtotal);
+    
+    if (result.success) {
+      setDiscountData(result.discount);
+      setDiscountMessage(`Giảm ${result.success ? formatPrice(result.discount.discount_amount) : ''}`);
+      setDiscountError('');
+    } else {
+      setDiscountData(null);
+      setDiscountMessage('');
+      setDiscountError(result.message);
+    }
+    
+    setValidatingDiscount(false);
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
+
+    // Validate discount code with debounce
+    if (name === 'discountCode') {
+      if (discountTimeoutRef.current) {
+        clearTimeout(discountTimeoutRef.current);
+      }
+
+      if (value.trim()) {
+        discountTimeoutRef.current = setTimeout(() => {
+          validateDiscountCode(value);
+        }, 500);
+      } else {
+        setDiscountData(null);
+        setDiscountMessage('');
+        setDiscountError('');
+      }
+    }
   };
 
   const handleSubmitOrder = async (e) => {
@@ -184,15 +248,48 @@ const Checkout = () => {
                 <label htmlFor="discount" className="block text-gray-700 font-medium mb-2">
                   Mã giảm giá (tùy chọn)
                 </label>
-                <input
-                  id="discount"
-                  type="text"
-                  name="discountCode"
-                  value={formData.discountCode}
-                  onChange={handleInputChange}
-                  placeholder="Nhập mã giảm giá nếu có"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      id="discount"
+                      type="text"
+                      name="discountCode"
+                      value={formData.discountCode}
+                      onChange={handleInputChange}
+                      placeholder="Nhập mã giảm giá nếu có"
+                      className={`flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                        discountError ? 'border-red-300 focus:ring-red-500' :
+                        discountData ? 'border-green-300 focus:ring-green-500' :
+                        'border-gray-300 focus:ring-green-500'
+                      }`}
+                    />
+                    {validatingDiscount && (
+                      <div className="flex items-center px-4">
+                        <div className="animate-spin h-5 w-5 border-2 border-green-600 border-t-transparent rounded-full"></div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Discount Success Message */}
+                  {discountData && !discountError && (
+                    <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">✓ Mã giảm giá hợp lệ</p>
+                        <p className="text-sm">Giảm {discountData.is_percentage ? `${discountData.value}%` : formatPrice(discountData.value)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-lg text-green-600">{formatPrice(discountData.discount_amount)}</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Discount Error Message */}
+                  {discountError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                      <p className="font-medium">✗ {discountError}</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Order Buttons */}
@@ -245,13 +342,20 @@ const Checkout = () => {
               </div>
               <div className="flex justify-between text-gray-600">
                 <span>Phí vận chuyển:</span>
-                <span>{totalPrice > 200000 ? '0đ' : '30.000đ'}</span>
+                <span>{shippingFee > 0 ? `${shippingFee.toLocaleString('vi-VN')}đ` : '0đ'}</span>
               </div>
+              
+              {/* Discount Amount Display */}
+              {discountAmount > 0 && (
+                <div className="flex justify-between text-green-600 font-medium">
+                  <span>Giảm giá:</span>
+                  <span>-{formatPrice(discountAmount)}</span>
+                </div>
+              )}
+              
               <div className="flex justify-between font-bold text-lg text-gray-800 pt-2 border-t">
                 <span>Tổng cộng:</span>
-                <span>
-                  {(totalPrice + (totalPrice > 200000 ? 0 : 30000)).toLocaleString('vi-VN')}đ
-                </span>
+                <span>{formatPrice(finalTotal)}</span>
               </div>
             </div>
 

@@ -21,6 +21,9 @@ urlpatterns = [
     # Wishlist endpoints
     path('wishlist/', include('shop.api.wishlist.urls')),
     
+    # Chatbot endpoints
+    path('chatbot/', include('shop.api.chatbot.urls')),
+    
     # Products and other endpoints
     path('', include(router.urls)),
 ]

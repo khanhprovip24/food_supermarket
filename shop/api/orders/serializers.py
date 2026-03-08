@@ -37,9 +37,36 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class DiscountSerializer(serializers.ModelSerializer):
     """Serializer for Discount"""
+    discount_display = serializers.SerializerMethodField()
+    remaining_uses = serializers.SerializerMethodField()
+    is_valid = serializers.SerializerMethodField()
+    
     class Meta:
         model = Discount
-        fields = ['id', 'code', 'value', 'is_percentage']
+        fields = [
+            'id', 'code', 'value', 'is_percentage', 'is_active',
+            'valid_from', 'valid_to', 'usage_limit', 'usage_count',
+            'discount_display', 'remaining_uses', 'is_valid'
+        ]
+    
+    def get_discount_display(self, obj):
+        """Hiển thị loại giảm: % hoặc số tiền"""
+        try:
+            value = float(obj.value)
+            if obj.is_percentage:
+                return f"{value:.0f}% OFF"
+            else:
+                return f"Giảm {value:,.0f}đ"
+        except (ValueError, TypeError):
+            return f"Lỗi giá trị: {obj.value}"
+    
+    def get_remaining_uses(self, obj):
+        """Số lần còn được dùng"""
+        return max(0, obj.usage_limit - obj.usage_count)
+    
+    def get_is_valid(self, obj):
+        """Kiểm tra mã giảm có hợp lệ không"""
+        return obj.is_valid()
 
 class OrderListSerializer(serializers.ModelSerializer):
     """Serializer for Order List (with items for modal display)"""
@@ -66,7 +93,12 @@ class OrderCreateSerializer(serializers.Serializer):
     """Serializer for creating Order from Cart"""
     shipping_address = serializers.CharField(max_length=500)
     payment_method = serializers.CharField(max_length=50)
-    discount_code = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    discount_code = serializers.CharField(
+        max_length=20, 
+        required=False, 
+        allow_blank=True,
+        default=''
+    )
     
     def validate_payment_method(self, value):
         # Accept various payment method formats
@@ -75,6 +107,13 @@ class OrderCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 f"Invalid payment method. Allowed: {', '.join(allowed_methods)}"
             )
+        return value
+    
+    def validate_discount_code(self, value):
+        """Validate discount code format"""
+        # Remove whitespace and convert to uppercase for consistency
+        if value:
+            value = value.strip()
         return value
 
 class OrderStatusUpdateSerializer(serializers.Serializer):

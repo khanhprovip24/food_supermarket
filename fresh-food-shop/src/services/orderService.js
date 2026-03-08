@@ -79,13 +79,10 @@ const orderService = {
       const payload = {
         shipping_address: shippingAddress,
         payment_method: paymentMethod,
+        discount_code: discountCode || '',  // Always include, even if empty
       };
 
-      // Thêm discount code nếu có
-      if (discountCode) {
-        payload.discount_code = discountCode;
-      }
-
+      console.log('Order payload:', payload);
       const response = await api.post(API_ENDPOINTS.ORDERS.CREATE_FROM_CART, payload);
       console.log('Order created:', response.data);
       return {
@@ -94,9 +91,22 @@ const orderService = {
       };
     } catch (error) {
       console.error('Error creating order:', error.response?.status, error.response?.data || error.message);
+      
+      // Better error message handling
+      let errorMessage = 'Có lỗi xảy ra khi tạo đơn hàng';
+      if (error.response?.data) {
+        if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.response.data.detail) {
+          errorMessage = error.response.data.detail;
+        } else if (error.response.data.errors) {
+          errorMessage = JSON.stringify(error.response.data.errors);
+        }
+      }
+      
       return {
         success: false,
-        error: error.response?.data?.detail || error.message,
+        error: errorMessage,
         data: null,
       };
     }
@@ -124,6 +134,58 @@ const orderService = {
       };
     }
   },
+
+  /**
+   * Xác thực mã giảm giá
+   * @param {string} discountCode - Mã giảm giá
+   * @param {number} totalAmount - Tổng tiền (để tính toán số tiền giảm)
+   * @returns {Promise}
+   */
+  validateDiscount: async (discountCode, totalAmount = 0) => {
+    try {
+      if (!discountCode.trim()) {
+        return {
+          success: false,
+          message: 'Vui lòng nhập mã giảm giá',
+          discount: null,
+        };
+      }
+
+      console.log('Validating discount code:', discountCode);
+      const payload = {
+        discount_code: discountCode.trim(),
+        total_amount: totalAmount,
+      };
+
+      const response = await api.post(API_ENDPOINTS.ORDERS.VALIDATE_DISCOUNT, payload);
+      console.log('Discount validation result:', response.data);
+      
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        discount: response.data.discount || null,
+      };
+    } catch (error) {
+      console.error('Error validating discount:', error.response?.status, error.response?.data || error.message);
+      
+      // Better error message handling
+      let errorMessage = 'Lỗi kiểm tra mã giảm giá';
+      if (error.response?.data) {
+        if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.response.data.detail) {
+          errorMessage = error.response.data.detail;
+        }
+      }
+      
+      return {
+        success: false,
+        message: errorMessage,
+        discount: null,
+      };
+    }
+  },
 };
 
 export default orderService;
+

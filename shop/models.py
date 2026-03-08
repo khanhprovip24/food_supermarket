@@ -29,10 +29,39 @@ class Product(models.Model):
 class Discount(models.Model):
     code = models.CharField(max_length=20, unique=True) # Mã giảm giá [cite: 166]
     value = models.FloatField() # Phần trăm hoặc số tiền giảm [cite: 167]
-    is_percentage = models.BooleanField(default=True)
+    is_percentage = models.BooleanField(default=True) # True: %, False: số tiền cụ thể
     valid_from = models.DateTimeField()
     valid_to = models.DateTimeField() # Thời gian áp dụng [cite: 168]
-    usage_limit = models.IntegerField(default=100) # Số lượt sử dụng [cite: 170]
+    usage_limit = models.IntegerField(default=100) # Số lượt sử dụng tối đa [cite: 170]
+    usage_count = models.IntegerField(default=0) # Số lần đã dùng
+    is_active = models.BooleanField(default=True) # Kích hoạt/tắt mã giảm
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        try:
+            value = float(self.value)
+            if self.is_percentage:
+                discount_type = f"{value:.0f}% OFF"
+            else:
+                discount_type = f"Giảm {value:,.0f}đ"
+        except (ValueError, TypeError):
+            discount_type = f"{self.value} (Lỗi định dạng)"
+        return f"{self.code} - {discount_type}"
+    
+    def is_valid(self):
+        """Kiểm tra mã giảm giá có hợp lệ không"""
+        from django.utils import timezone
+        now = timezone.now()
+        return (
+            self.is_active and
+            self.valid_from <= now <= self.valid_to and
+            self.usage_count < self.usage_limit
+        )
+    
+    def remaining_uses(self):
+        """Số lần còn được dùng"""
+        return max(0, self.usage_limit - self.usage_count)
 
 # 4. QUẢN LÝ ĐƠN HÀNG (Orders) [cite: 58-82, 238-255]
 class Order(models.Model):
