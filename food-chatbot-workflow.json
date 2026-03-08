@@ -1,0 +1,397 @@
+{
+  "name": "Food Chatbot Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "food-chatbot",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "food-chatbot-webhook"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Query Classification Function\n// Classifies user queries into types and determines if product data is needed\n\nconst message = $input.item.json.body.message || '';\nconst trimmedMessage = message.trim();\nconst lowerMessage = trimmedMessage.toLowerCase();\n\n// Initialize classification result\nconst classification = {\n  type: 'general',\n  needsProductData: false,\n  extractedKeywords: [],\n  category: null,\n  originalMessage: trimmedMessage\n};\n\n// Input validation - check for empty or whitespace-only messages\nif (!trimmedMessage || trimmedMessage.length === 0) {\n  classification.type = 'invalid';\n  classification.error = 'EMPTY_INPUT';\n  return { json: classification };\n}\n\n// Check for messages that are too short (likely invalid)\nif (trimmedMessage.length < 2) {\n  classification.type = 'invalid';\n  classification.error = 'TOO_SHORT';\n  return { json: classification };\n}\n\n// Price query detection\nconst priceKeywords = {\n  vietnamese: ['giá', 'bao nhiêu', 'giá cả', 'giá bán', 'giá tiền'],\n  english: ['price', 'cost', 'how much', 'expensive', 'cheap']\n};\n\nconst hasPriceKeyword = \n  priceKeywords.vietnamese.some(kw => lowerMessage.includes(kw)) ||\n  priceKeywords.english.some(kw => lowerMessage.includes(kw));\n\nif (hasPriceKeyword) {\n  classification.type = 'price';\n  classification.needsProductData = true;\n}\n\n// Suggestion query detection\nconst suggestionKeywords = {\n  vietnamese: ['ăn gì', 'ăn j', 'nấu gì', 'nấu j', 'món gì', 'món j', 'gợi ý', 'đề xuất'],\n  english: ['what should i eat', 'what to eat', 'suggest', 'recommend', 'what dish', 'meal idea']\n};\n\nconst hasSuggestionKeyword = \n  suggestionKeywords.vietnamese.some(kw => lowerMessage.includes(kw)) ||\n  suggestionKeywords.english.some(kw => lowerMessage.includes(kw));\n\nif (hasSuggestionKeyword) {\n  classification.type = 'suggestion';\n  classification.needsProductData = true;\n}\n\n// Availability query detection\nconst availabilityKeywords = {\n  vietnamese: ['còn', 'còn không', 'có không', 'có sẵn', 'hết hàng', 'in stock'],\n  english: ['available', 'in stock', 'out of stock', 'have', 'do you have']\n};\n\nconst hasAvailabilityKeyword = \n  availabilityKeywords.vietnamese.some(kw => lowerMessage.includes(kw)) ||\n  availabilityKeywords.english.some(kw => lowerMessage.includes(kw));\n\nif (hasAvailabilityKeyword) {\n  classification.type = 'availability';\n  classification.needsProductData = true;\n}\n\n// Extract food-related keywords for product search\nconst foodKeywords = {\n  vegetables: ['rau', 'vegetable', 'cải', 'xà lách', 'cà chua', 'tomato', 'lettuce', 'cabbage'],\n  meat: ['thịt', 'meat', 'gà', 'chicken', 'heo', 'pork', 'bò', 'beef'],\n  seafood: ['cá', 'fish', 'tôm', 'shrimp', 'mực', 'squid', 'hải sản', 'seafood'],\n  fruits: ['trái cây', 'fruit', 'táo', 'apple', 'chuối', 'banana', 'cam', 'orange']\n};\n\nconst keywords = [];\nlet detectedCategory = null;\n\nfor (const [category, terms] of Object.entries(foodKeywords)) {\n  for (const term of terms) {\n    if (lowerMessage.includes(term)) {\n      keywords.push(term);\n      if (!detectedCategory) {\n        detectedCategory = category;\n      }\n    }\n  }\n}\n\nclassification.extractedKeywords = [...new Set(keywords)];\nclassification.category = detectedCategory;\n\n// Pass through session data\nclassification.sessionId = $input.item.json.body.sessionId || null;\nclassification.timestamp = $input.item.json.body.timestamp || Date.now();\n\nreturn { json: classification };"
+      },
+      "id": "query-classifier",
+      "name": "Query Classifier",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.needsProductData }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-product-data-needed",
+      "name": "Check Product Data Needed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.DJANGO_API_URL || 'http://localhost:8000' }}/api/products/",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "search",
+              "value": "={{ $json.extractedKeywords && $json.extractedKeywords.length > 0 ? $json.extractedKeywords.join(' ') : '' }}"
+            },
+            {
+              "name": "category",
+              "value": "={{ $json.category || '' }}"
+            },
+            {
+              "name": "in_stock",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "product-api",
+      "name": "Django Product API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// System Prompt Builder\n// Creates the prompt for Gemini API based on query type and available product data\n\nconst inputData = $input.item.json;\nconst classification = inputData.classification || inputData;\nconst message = classification.originalMessage;\nconst queryType = classification.type;\nconst hasProductError = inputData.productDataError || false;\n\n// Check if we have product data from the Django API\nlet productData = null;\nif (inputData.products) {\n  productData = inputData.products;\n} else if (inputData.body && inputData.body.products) {\n  productData = inputData.body.products;\n}\n\n// Base system instructions\nconst systemInstructions = `You are a helpful food chatbot for a Vietnamese fresh food e-commerce website.\n\nRULES:\n1. ONLY answer questions related to food, cooking, recipes, and food products\n2. If asked about non-food topics (politics, religion, technology, etc.), politely decline with: \"Xin lỗi, tôi chỉ có thể trả lời các câu hỏi về thực phẩm. Bạn có câu hỏi nào về sản phẩm thực phẩm của chúng tôi không?\" (Vietnamese) or \"Sorry, I can only answer questions about food. Do you have any questions about our food products?\" (English)\n3. Keep responses concise and helpful (max 3-4 sentences)\n4. Use Vietnamese when the user speaks Vietnamese, English when they speak English\n5. When suggesting dishes, prefer Vietnamese cuisine\n6. Always be polite and friendly`;\n\n// Build the full prompt\nlet fullPrompt = systemInstructions + '\\n\\n';\n\n// If product API failed, inform Gemini to apologize and suggest retry\nif (hasProductError && (queryType === 'price' || queryType === 'suggestion' || queryType === 'availability')) {\n  fullPrompt += 'NOTE: Product data is temporarily unavailable. Apologize to the user and suggest they try again in a moment. ';\n}\n\n// Add context based on query type\nif (queryType === 'price') {\n  fullPrompt += 'The user is asking about product prices. ';\n  if (classification.extractedKeywords && classification.extractedKeywords.length > 0) {\n    fullPrompt += `They mentioned: ${classification.extractedKeywords.join(', ')}. `;\n  }\n  if (productData && productData.length > 0) {\n    fullPrompt += '\\n\\nAvailable products:\\n';\n    productData.slice(0, 5).forEach(p => {\n      fullPrompt += `- ${p.name}: ${p.price} ${p.currency}/${p.unit}${p.in_stock ? '' : ' (out of stock)'}\\n`;\n    });\n  }\n  fullPrompt += 'Provide helpful information about pricing. ';\n} else if (queryType === 'suggestion') {\n  fullPrompt += 'The user is asking for food or dish suggestions. ';\n  if (productData && productData.length > 0) {\n    fullPrompt += '\\n\\nAvailable products:\\n';\n    productData.slice(0, 5).forEach(p => {\n      fullPrompt += `- ${p.name} (${p.category})\\n`;\n    });\n  }\n  fullPrompt += 'Recommend Vietnamese dishes that use fresh ingredients from the available products. ';\n} else if (queryType === 'availability') {\n  fullPrompt += 'The user is asking about product availability. ';\n  if (classification.extractedKeywords && classification.extractedKeywords.length > 0) {\n    fullPrompt += `They are interested in: ${classification.extractedKeywords.join(', ')}. `;\n  }\n  if (productData && productData.length > 0) {\n    fullPrompt += '\\n\\nProduct inventory:\\n';\n    productData.slice(0, 5).forEach(p => {\n      fullPrompt += `- ${p.name}: ${p.in_stock ? 'In stock' : 'Out of stock'}\\n`;\n    });\n  }\n} else if (queryType === 'invalid') {\n  fullPrompt += 'The user sent an empty or invalid message. Ask them to provide a valid question about food. ';\n}\n\n// Add the user's actual query\nfullPrompt += `\\n\\nUser query: ${message}\\n\\nRespond naturally and helpfully:`;\n\nreturn {\n  json: {\n    prompt: fullPrompt,\n    queryType: queryType,\n    classification: classification,\n    productData: productData,\n    hasProductError: hasProductError\n  }\n};"
+      },
+      "id": "prompt-builder",
+      "name": "System Prompt Builder",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Gemini API Error Handler\n// Handles errors from Gemini API calls including HTTP errors and timeouts\n\nconst error = $input.item.json.error || {};\nconst errorMessage = error.message || '';\nconst httpCode = error.httpCode || 0;\n\n// Log error details for debugging\nconst errorLog = {\n  timestamp: Date.now(),\n  errorType: 'GEMINI_API_ERROR',\n  httpCode: httpCode,\n  message: errorMessage,\n  context: 'Gemini API Request Failed'\n};\n\nconsole.error('Gemini API Error:', JSON.stringify(errorLog));\n\n// Determine specific error type and user message\nlet userMessage = '';\nlet errorType = 'UNKNOWN';\n\nif (httpCode === 503) {\n  errorType = 'SERVICE_UNAVAILABLE';\n  userMessage = 'Xin lỗi, hệ thống AI tạm thời không khả dụng. Vui lòng thử lại sau.';\n} else if (httpCode === 401 || httpCode === 403) {\n  errorType = 'AUTHENTICATION_ERROR';\n  userMessage = 'Xin lỗi, hệ thống đang gặp sự cố xác thực. Vui lòng thử lại sau.';\n} else if (httpCode === 429) {\n  errorType = 'RATE_LIMIT';\n  userMessage = 'Xin lỗi, hệ thống đang quá tải. Vui lòng thử lại sau ít phút.';\n} else if (errorMessage.toLowerCase().includes('timeout') || errorMessage.toLowerCase().includes('timed out')) {\n  errorType = 'TIMEOUT';\n  userMessage = 'Xin lỗi, yêu cầu mất quá nhiều thời gian. Vui lòng thử lại.';\n} else {\n  errorType = 'GENERAL_ERROR';\n  userMessage = 'Xin lỗi, hệ thống tạm thời không khả dụng. Vui lòng thử lại sau.';\n}\n\nreturn {\n  json: {\n    success: false,\n    message: userMessage,\n    error: errorType,\n    timestamp: Date.now(),\n    errorDetails: errorLog\n  }\n};"
+      },
+      "id": "gemini-error-handler",
+      "name": "Gemini Error Handler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Product API Error Handler\n// Handles errors from Django Product API calls including HTTP errors and timeouts\n\nconst error = $input.item.json.error || {};\nconst errorMessage = error.message || '';\nconst httpCode = error.httpCode || 0;\n\n// Get classification data to pass through\nconst classification = $input.first().json || {};\n\n// Log error details for debugging\nconst errorLog = {\n  timestamp: Date.now(),\n  errorType: 'PRODUCT_API_ERROR',\n  httpCode: httpCode,\n  message: errorMessage,\n  context: 'Django Product API Request Failed',\n  queryType: classification.type\n};\n\nconsole.error('Product API Error:', JSON.stringify(errorLog));\n\n// Determine user message\nlet userMessage = '';\nlet errorType = 'UNKNOWN';\n\nif (errorMessage.toLowerCase().includes('timeout') || errorMessage.toLowerCase().includes('timed out')) {\n  errorType = 'TIMEOUT';\n  userMessage = 'Xin lỗi, không thể lấy thông tin sản phẩm lúc này do hết thời gian chờ. Vui lòng thử lại.';\n} else if (httpCode >= 500) {\n  errorType = 'SERVER_ERROR';\n  userMessage = 'Xin lỗi, hệ thống sản phẩm đang gặp sự cố. Vui lòng thử lại sau.';\n} else if (httpCode >= 400) {\n  errorType = 'CLIENT_ERROR';\n  userMessage = 'Xin lỗi, không thể truy xuất thông tin sản phẩm. Vui lòng thử lại.';\n} else {\n  errorType = 'GENERAL_ERROR';\n  userMessage = 'Xin lỗi, không thể lấy thông tin sản phẩm lúc này. Vui lòng thử lại.';\n}\n\n// Return classification data without product data so workflow can continue\nreturn {\n  json: {\n    ...classification,\n    productDataError: true,\n    productErrorType: errorType,\n    productErrorLog: errorLog\n  }\n};"
+      },
+      "id": "product-error-handler",
+      "name": "Product API Error Handler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Input Validation Handler\n// Handles invalid input and returns appropriate error messages\n\nconst classification = $input.item.json;\nconst errorType = classification.error || 'UNKNOWN';\n\n// Log validation error\nconst errorLog = {\n  timestamp: Date.now(),\n  errorType: 'VALIDATION_ERROR',\n  validationError: errorType,\n  message: classification.originalMessage || '',\n  context: 'Input Validation Failed'\n};\n\nconsole.error('Input Validation Error:', JSON.stringify(errorLog));\n\n// Determine user message based on error type\nlet userMessage = '';\n\nif (errorType === 'EMPTY_INPUT') {\n  userMessage = 'Vui lòng nhập câu hỏi của bạn về thực phẩm.';\n} else if (errorType === 'TOO_SHORT') {\n  userMessage = 'Vui lòng nhập câu hỏi đầy đủ hơn về thực phẩm.';\n} else {\n  userMessage = 'Vui lòng nhập câu hỏi hợp lệ về thực phẩm.';\n}\n\nreturn {\n  json: {\n    success: false,\n    message: userMessage,\n    error: 'VALIDATION_ERROR',\n    validationError: errorType,\n    timestamp: Date.now(),\n    errorDetails: errorLog\n  }\n};"
+      },
+      "id": "validation-error-handler",
+      "name": "Input Validation Handler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.type }}",
+              "value2": "invalid"
+            }
+          ]
+        }
+      },
+      "id": "check-validation",
+      "name": "Check Input Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        450,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "AIzaSyAKFH-hNkyiaGJxlzM9D4VB1Pwt0zt8tk0"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": {{ $json.prompt }}\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"temperature\": 0.8,\n    \"maxOutputTokens\": 400,\n    \"topP\": 0.95\n  }\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "gemini-api",
+      "name": "Gemini API Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Gemini Response Validator and Formatter\n// Validates and extracts the response from Gemini API, includes product data\n\nconst geminiResponse = $input.item.json;\nconst promptBuilderData = $input.first().json;\nconst classification = promptBuilderData.classification;\nconst productData = promptBuilderData.productData;\n\n// Initialize result\nconst result = {\n  success: false,\n  message: '',\n  products: [],\n  queryType: classification.type,\n  timestamp: classification.timestamp || Date.now(),\n  sessionId: classification.sessionId,\n  error: null\n};\n\ntry {\n  // Validate response structure\n  if (!geminiResponse || typeof geminiResponse !== 'object') {\n    throw new Error('Invalid response format: response is not an object');\n  }\n\n  if (!geminiResponse.candidates || !Array.isArray(geminiResponse.candidates)) {\n    throw new Error('Invalid response format: missing candidates array');\n  }\n\n  if (geminiResponse.candidates.length === 0) {\n    throw new Error('Invalid response format: candidates array is empty');\n  }\n\n  const candidate = geminiResponse.candidates[0];\n  \n  if (!candidate.content) {\n    throw new Error('Invalid response format: missing content in candidate');\n  }\n\n  if (!candidate.content.parts || !Array.isArray(candidate.content.parts)) {\n    throw new Error('Invalid response format: missing parts array in content');\n  }\n\n  if (candidate.content.parts.length === 0) {\n    throw new Error('Invalid response format: parts array is empty');\n  }\n\n  const textPart = candidate.content.parts[0];\n  \n  if (!textPart.text || typeof textPart.text !== 'string') {\n    throw new Error('Invalid response format: missing or invalid text in parts');\n  }\n\n  // Extract the text response\n  const responseText = textPart.text.trim();\n  \n  if (responseText.length === 0) {\n    throw new Error('Invalid response: empty text response');\n  }\n\n  // Success - valid response\n  result.success = true;\n  result.message = responseText;\n  \n  // Format product data based on query type\n  if (productData && Array.isArray(productData) && productData.length > 0) {\n    if (classification.type === 'price') {\n      // Include price information\n      result.products = productData.slice(0, 5).map(p => ({\n        name: p.name,\n        price: `${p.price.toLocaleString()} ${p.currency}/${p.unit}`,\n        available: p.in_stock\n      }));\n    } else if (classification.type === 'suggestion') {\n      // Include product names and categories for suggestions\n      result.products = productData.slice(0, 3).map(p => ({\n        name: p.name,\n        category: p.category\n      }));\n    } else if (classification.type === 'availability') {\n      // Include availability status\n      result.products = productData.slice(0, 5).map(p => ({\n        name: p.name,\n        available: p.in_stock\n      }));\n    }\n  }\n  \n} catch (error) {\n  // Handle validation errors\n  result.success = false;\n  result.error = error.message;\n  result.message = 'Xin lỗi, hệ thống tạm thời không khả dụng. Vui lòng thử lại sau.';\n  \n  // Log error for debugging\n  console.error('Gemini Response Validation Error:', {\n    error: error.message,\n    response: geminiResponse,\n    timestamp: result.timestamp\n  });\n}\n\nreturn { json: result };"
+      },
+      "id": "response-validator",
+      "name": "Response Formatter",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Query Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Classifier": {
+      "main": [
+        [
+          {
+            "node": "Check Input Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Input Valid": {
+      "main": [
+        [
+          {
+            "node": "Input Validation Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Product Data Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Validation Handler": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Product Data Needed": {
+      "main": [
+        [
+          {
+            "node": "Django Product API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "System Prompt Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Django Product API": {
+      "main": [
+        [
+          {
+            "node": "System Prompt Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Product API Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Product API Error Handler": {
+      "main": [
+        [
+          {
+            "node": "System Prompt Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "System Prompt Builder": {
+      "main": [
+        [
+          {
+            "node": "Gemini API Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini API Request": {
+      "main": [
+        [
+          {
+            "node": "Response Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Gemini Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Formatter": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

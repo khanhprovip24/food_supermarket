@@ -1,0 +1,84 @@
+{
+  "name": "Simple Food Chatbot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "food-chatbot",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "food-chatbot"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyAKFH-hNkyiaGJxlzM9D4VB1Pwt0zt8tk0",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [{\n    \"parts\": [{\n      \"text\": \"Bạn là trợ lý AI thân thiện của Fresh Market - cửa hàng thực phẩm tươi sống.\\n\\nQUY TẮC:\\n1. CHỈ trả lời câu hỏi về thực phẩm, nấu ăn, món ăn, dinh dưỡng, nguyên liệu, công thức nấu ăn\\n2. Nếu hỏi chủ đề khác (thời tiết, chính trị, công nghệ...), từ chối lịch sự: 'Xin lỗi, tôi chỉ có thể tư vấn về thực phẩm. Bạn có câu hỏi nào về sản phẩm của chúng tôi không?'\\n3. Trả lời ĐẦY ĐỦ, CHI TIẾT (5-10 câu hoặc nhiều hơn nếu cần)\\n4. Khi hỏi CÔNG THỨC NẤU ĂN: liệt kê rõ NGUYÊN LIỆU và CÁC BƯỚC thực hiện chi tiết\\n5. Khi gợi ý món ăn: đưa ra 2-3 món cụ thể với mô tả\\n6. Khi hỏi về giá: nếu không biết chính xác, đưa ra khoảng giá tham khảo\\n7. Ưu tiên món Việt Nam, nhiệt tình, thân thiện\\n\\nCâu hỏi của khách: {{ $json.body.message }}\\n\\nTrả lời đầy đủ, chi tiết bằng tiếng Việt:\"\n    }]\n  }],\n  \"generationConfig\": {\n    \"temperature\": 0.8,\n    \"maxOutputTokens\": 800,\n    \"topP\": 0.95\n  }\n}",
+        "options": {}
+      },
+      "id": "gemini",
+      "name": "Gemini API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const geminiResponse = $input.item.json;\nconst userMessage = $('Webhook').item.json.body.message;\n\nlet botMessage = \"Xin lỗi, tôi không thể trả lời lúc này.\";\n\ntry {\n  if (geminiResponse.candidates && geminiResponse.candidates[0]) {\n    botMessage = geminiResponse.candidates[0].content.parts[0].text;\n  }\n} catch (error) {\n  console.error('Error parsing Gemini response:', error);\n}\n\nreturn {\n  json: {\n    success: true,\n    message: botMessage,\n    timestamp: Date.now()\n  }\n};"
+      },
+      "id": "format",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "response",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Gemini API", "type": "main", "index": 0}]]
+    },
+    "Gemini API": {
+      "main": [[{"node": "Format Response", "type": "main", "index": 0}]]
+    },
+    "Format Response": {
+      "main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
